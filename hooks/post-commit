@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+branch="$(git branch --show-current)"
+[ "$branch" != "main" ] && exit 0
+for remote in $(git remote); do
+    git push "$remote" "$branch" 2>/dev/null &
+done
+wait
