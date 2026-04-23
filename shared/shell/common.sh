@@ -7,6 +7,7 @@ alias ll='ls -alF'
 alias la='ls -A'
 alias l='ls -CF'
 
+alias lg='lazygit'
 alias g='git'
 alias gs='git status'
 alias gd='git diff'
