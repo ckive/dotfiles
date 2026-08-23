@@ -1,0 +1,31 @@
+# This is Git's per-user configuration file.
+# Managed by chezmoi — edit via `chezmoi edit ~/.gitconfig`, then `chezmoi apply`.
+
+[user]
+	name = ckive
+	email = danyang2023@u.northwestern.edu
+
+[alias]
+	s = status
+	d = diff
+	ds = diff --staged
+	co = checkout
+	br = branch
+	ci = commit
+	lg = log --oneline --graph --decorate -20
+	last = log -1 HEAD
+	unstage = reset HEAD --
+	amend = commit --amend --no-edit
+
+[core]
+	editor = nano
+	autocrlf = input
+
+[pull]
+	rebase = true
+
+[push]
+	default = current
+
+[init]
+	defaultBranch = main

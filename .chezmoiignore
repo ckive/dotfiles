@@ -1,0 +1,57 @@
+# Paths here are TARGET-relative (.claude/...), not source-relative (dot_claude/...).
+# This is the safety net for the PostToolUse auto-add hook: anything matched here
+# will never be tracked, even if a hook tries to add it.
+
+# Repo docs live in the source dir only — never apply them into $HOME.
+README.md
+LICENSE
+
+.DS_Store
+**/.DS_Store
+
+# ---- Claude Code: ephemeral / sensitive / regenerable ----
+.claude/.credentials.json
+.claude/.last-cleanup
+.claude/*.log
+.claude/*.bak
+.claude/agent-memory/**
+.claude/agents.bak/**
+.claude/backups/**
+.claude/cache/**
+.claude/daemon/**
+.claude/daemon-auth-*
+.claude/debug/**
+.claude/downloads/**
+.claude/file-history/**
+.claude/history.jsonl
+.claude/ide/**
+.claude/jobs/**
+.claude/paste-cache/**
+.claude/plans/**
+.claude/plugins/**
+.claude/projects/**
+.claude/session-env/**
+.claude/sessions/**
+.claude/shell-snapshots/**
+.claude/stats-cache.json
+.claude/statsig/**
+.claude/tasks/**
+.claude/todos/**
+
+# ---- Kimi Code ----
+.kimi-code/bin/**
+.kimi-code/device_id
+.kimi-code/logs/**
+.kimi-code/migrations-effort.json
+.kimi-code/session_index.jsonl
+.kimi-code/sessions/**
+.kimi-code/telemetry/**
+.kimi-code/updates/**
+.kimi-code/user-history/**
+.kimi-code/workspaces.json
+
+# ---- Codex (scaffolded; not yet installed) ----
+.codex/auth.json
+.codex/history.jsonl
+.codex/log/**
+.codex/sessions/**

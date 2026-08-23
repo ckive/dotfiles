@@ -1,0 +1,36 @@
+#!/bin/bash
+# PostToolUse (Edit|Write): auto-track edited Claude config files in chezmoi.
+#
+# Claude Code passes hook data as JSON on STDIN (not $CLAUDE_TOOL_INPUT, which the
+# upstream gist used and which does not exist). The edited path is .tool_input.file_path.
+#
+# Fails open: never blocks the session.
+
+set -uo pipefail
+
+command -v chezmoi >/dev/null 2>&1 || exit 0
+command -v jq >/dev/null 2>&1 || exit 0
+
+payload="$(cat)"
+file="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
+[ -n "$file" ] || exit 0
+
+# Only care about Claude config files.
+printf '%s' "$file" | grep -qE 'CLAUDE\.md$|CLAUDE\.local\.md$|/\.claude/' || exit 0
+
+# Never re-add something chezmoi is ignoring, and never add from inside the source dir.
+case "$file" in
+  {{ .chezmoi.homeDir }}/Documents/dotfiles/*) exit 0 ;;
+esac
+
+lock="$HOME/.claude-backup.lock"
+
+if command -v flock >/dev/null 2>&1; then
+  flock -w 5 "$lock" chezmoi add "$file" >/dev/null 2>&1 &
+else
+  # flock missing => degrade loudly rather than silently doing nothing.
+  echo "[chezmoi-add] flock not found; run: brew install flock" >&2
+  chezmoi add "$file" >/dev/null 2>&1 &
+fi
+
+exit 0

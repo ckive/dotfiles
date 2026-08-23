@@ -1,0 +1,20 @@
+{{- /*
+  Rendered by `chezmoi init` into ~/.config/chezmoi/chezmoi.toml.
+
+  NOTE the bootstrap chicken-and-egg: sourceDir lives in this config, but on a new
+  machine the config does not exist until init has already run. So the first
+  invocation must pass --source explicitly:
+
+    chezmoi init --apply --source ~/Documents/dotfiles git@github.com:ckive/dotfiles.git
+*/ -}}
+sourceDir = {{ printf "%s/Documents/dotfiles" .chezmoi.homeDir | quote }}
+
+[git]
+    autoCommit = true
+    autoPush = true
+
+[add]
+    # Hard-fail rather than warn if an API-key-shaped string is ever added.
+    # Deliberate: the PostToolUse hook runs chezmoi add unattended, so a warning
+    # would scroll past unseen.
+    secrets = "error"

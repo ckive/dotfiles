@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git config *)",
+      "Bash(command -v gh)",
+      "Bash(gh auth *)",
+      "Bash(brew install *)",
+      "Bash(zsh --version)",
+      "Bash(gh repo *)",
+      "Bash(./setup.sh)"
+    ]
+  }
+}

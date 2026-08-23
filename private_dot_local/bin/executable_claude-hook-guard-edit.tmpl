@@ -1,0 +1,55 @@
+#!/bin/bash
+# PreToolUse (Edit|Write): two guards.
+#
+#   1. Source-dir guard — warn when editing the chezmoi SOURCE directly. chezmoi
+#      copies rather than symlinks, so source edits do not reach $HOME until
+#      `chezmoi apply`, and $HOME edits are clobbered by the next apply. This is
+#      the single most common way to lose work after migrating off a symlink farm.
+#
+#   2. Secret pre-flight — block writing key-shaped strings into a tracked config.
+#      Complements chezmoi's add.secrets="error", which only fires at add time.
+#
+# Warn = exit 0 with {"systemMessage": ...}; plain stderr on exit 0 only reaches
+# the debug log and would be invisible.
+# Block = exit 2 with stderr as the reason.
+
+set -uo pipefail
+
+command -v jq >/dev/null 2>&1 || exit 0
+
+payload="$(cat)"
+file="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
+[ -n "$file" ] || exit 0
+
+SOURCE_DIR="{{ .chezmoi.homeDir }}/Documents/dotfiles"
+
+# ---- 2. Secret pre-flight (block) ----
+content="$(printf '%s' "$payload" | jq -r '
+  .tool_input.content // .tool_input.new_string // empty' 2>/dev/null)"
+
+if [ -n "$content" ]; then
+  case "$file" in
+    */.claude/*|*/.codex/*|*/.kimi-code/*|"$SOURCE_DIR"/*|*/.zshrc|*/.gitconfig)
+      if printf '%s' "$content" | grep -qE 'sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----'; then
+        echo "BLOCKED by guard-edit: content looks like a live credential." >&2
+        echo "File: $file" >&2
+        echo "This repo auto-commits and auto-pushes; a secret here would be published." >&2
+        echo "Use a secret manager or an env var instead." >&2
+        exit 2
+      fi
+      ;;
+  esac
+fi
+
+# ---- 1. Source-dir guard (warn) ----
+case "$file" in
+  "$SOURCE_DIR"/*)
+    rel="${file#"$SOURCE_DIR"/}"
+    jq -n --arg rel "$rel" '{
+      systemMessage: ("chezmoi source edit: \($rel). This does NOT change $HOME until you run `chezmoi apply`. If you meant to change the live file, edit the target in $HOME and run `chezmoi re-add` instead.")
+    }'
+    exit 0
+    ;;
+esac
+
+exit 0
