@@ -31,6 +31,33 @@ chezmoi init --apply --source ~/Documents/dotfiles git@github.com:ckive/dotfiles
 `flock` for locking, and every hook parses its stdin JSON with `jq`. macOS ships neither
 `flock` nor a new enough `jq` by default — without them the hooks fail **silently**.
 
+## What gets backed up (two gates)
+
+A file is auto-tracked only if it passes **both**:
+
+**Gate 1 — WHAT.** It must be an agent config file:
+`CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `AGENTS.local.md`, or anything under
+`.claude/`, `.codex/`, `.kimi-code/`. Source code, build output, and data are never
+tracked, ever.
+
+**Gate 2 — WHERE.** It must live under either:
+- a global agent dir — `~/.claude`, `~/.codex`, `~/.kimi-code` (always included), or
+- a prefix listed in `~/.config/claude-sync/backup-paths`
+
+To back up a new project directory, add one line to that file:
+
+```bash
+echo '~/work/client-x/' >> ~/.config/claude-sync/backup-paths
+chezmoi re-add   # picks up the allowlist change itself
+```
+
+The allowlist widens **where** we look, never **what** we take — adding a 20GB
+project directory does not put 20GB in this repo.
+
+> Upstream gist note: its setup section is opt-in per project, but its hook
+> blanket-matches `.claude/` and sweeps in every project under `$HOME`. Gate 2
+> restores the documented intent.
+
 ## Layout
 
 | Source path | Target | Notes |

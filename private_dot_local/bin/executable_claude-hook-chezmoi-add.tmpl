@@ -4,6 +4,19 @@
 # Claude Code passes hook data as JSON on STDIN (not $CLAUDE_TOOL_INPUT, which the
 # upstream gist used and which does not exist). The edited path is .tool_input.file_path.
 #
+# SCOPE — two independent gates, both must pass:
+#
+#   1. WHAT  — the file must be a Claude config file:
+#              CLAUDE.md, CLAUDE.local.md, or anything under a .claude/ directory.
+#              Source code is never tracked.
+#
+#   2. WHERE — the file must live under either:
+#              a) a global agent config dir (~/.claude, ~/.codex, ~/.kimi-code), or
+#              b) a prefix listed in ~/.config/claude-sync/backup-paths
+#
+# The upstream gist omitted gate 2, so it swept in every project under $HOME.
+# Its own setup instructions were opt-in per project; this restores that intent.
+#
 # Fails open: never blocks the session.
 
 set -uo pipefail
@@ -15,14 +28,44 @@ payload="$(cat)"
 file="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
 [ -n "$file" ] || exit 0
 
-# Only care about Claude config files.
-printf '%s' "$file" | grep -qE 'CLAUDE\.md$|CLAUDE\.local\.md$|/\.claude/' || exit 0
+SOURCE_DIR="{{ .chezmoi.homeDir }}/Documents/dotfiles"
+ALLOWLIST="$HOME/.config/claude-sync/backup-paths"
 
-# Never re-add something chezmoi is ignoring, and never add from inside the source dir.
+# Never add from inside the chezmoi source dir itself.
 case "$file" in
-  {{ .chezmoi.homeDir }}/Documents/dotfiles/*) exit 0 ;;
+  "$SOURCE_DIR"/*) exit 0 ;;
 esac
 
+# ---- Gate 1: WHAT ----
+# Covers all three agents: Claude reads CLAUDE.md/.claude/, Codex reads
+# AGENTS.md/.codex/, Kimi reads .kimi-code/. Omitting AGENTS.md here would mean
+# codex config silently never syncs.
+printf '%s' "$file" | grep -qE 'CLAUDE\.md$|CLAUDE\.local\.md$|AGENTS\.md$|AGENTS\.local\.md$|/\.claude/|/\.codex/|/\.kimi-code/' || exit 0
+
+# ---- Gate 2: WHERE ----
+eligible=0
+
+case "$file" in
+  "$HOME"/.claude/*|"$HOME"/.codex/*|"$HOME"/.kimi-code/*) eligible=1 ;;
+esac
+
+if [ "$eligible" -eq 0 ] && [ -r "$ALLOWLIST" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%%#*}"                          # strip comment
+    line="${line#"${line%%[![:space:]]*}"}"     # ltrim
+    line="${line%"${line##*[![:space:]]}"}"     # rtrim
+    [ -n "$line" ] || continue
+    prefix="${line/#\~/$HOME}"                  # expand leading ~
+    prefix="${prefix%/}/"                       # exactly one trailing slash
+    case "$file" in
+      "$prefix"*) eligible=1; break ;;
+    esac
+  done < "$ALLOWLIST"
+fi
+
+[ "$eligible" -eq 1 ] || exit 0
+
+# ---- Track it ----
 lock="$HOME/.claude-backup.lock"
 
 if command -v flock >/dev/null 2>&1; then

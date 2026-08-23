@@ -1,0 +1,22 @@
+# Which project directories may have their Claude configs auto-backed-up.
+#
+# HOW THIS WORKS
+#   One path prefix per line. `~` is expanded. Blank lines and #-comments ignored.
+#   A project file is auto-added to chezmoi only if it sits under one of these
+#   prefixes. Anything else under $HOME is ignored.
+#
+# IMPORTANT — this list widens WHERE we look, never WHAT we back up.
+#   Even inside an allowlisted directory, only Claude config files are tracked:
+#     - CLAUDE.md
+#     - CLAUDE.local.md
+#     - anything under a .claude/ directory
+#   Your source code, build output, and data are never touched. Adding a 20GB
+#   project directory here does not put 20GB in your dotfiles repo.
+#
+# ALWAYS INCLUDED (no need to list them):
+#   ~/.claude/   ~/.codex/   ~/.kimi-code/
+#
+# To stop tracking something already added:  chezmoi forget <path>
+# To see what is tracked:                    chezmoi managed
+
+~/Desktop/projects/
