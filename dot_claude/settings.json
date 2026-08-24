@@ -1,27 +1,13 @@
 {
-  "permissions": {
-    "defaultMode": "default"
-  },
-  "model": "opus",
-  "statusLine": {
-    "type": "command",
-    "command": "input=$(cat); cwd=$(echo \"$input\" | jq -r '.workspace.current_dir // .cwd // \"\"'); model=$(echo \"$input\" | jq -r '.model.display_name // \"\"'); used=$(echo \"$input\" | jq -r '.context_window.used_percentage // empty'); user=$(whoami); host=$(hostname -s); short_cwd=\"${cwd/#$HOME/\\~}\"; ctx_str=$([ -n \"$used\" ] && echo \"ctx: ${used}%\" || echo \"ctx: --\"); printf \"\\033[1;34m%s@%s\\033[0m  \\033[1;32m%s\\033[0m  |  %s  %s\" \"$user\" \"$host\" \"$short_cwd\" \"$model\" \"$ctx_str\""
-  },
-  "enabledPlugins": {
-    "clangd-lsp@claude-plugins-official": true
-  },
-  "effortLevel": "high",
-  "voice": {
-    "enabled": true,
-    "mode": "hold"
-  },
-  "skipDangerousModePermissionPrompt": true,
-  "voiceEnabled": true,
   "attribution": {
     "commit": "",
     "pr": "",
     "sessionUrl": false
   },
+  "permissions": {
+    "defaultMode": "default"
+  },
+  "model": "haiku",
   "hooks": {
     "SessionStart": [
       {
@@ -88,5 +74,19 @@
         ]
       }
     ]
-  }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "input=$(cat); cwd=$(echo \"$input\" | jq -r '.workspace.current_dir // .cwd // \"\"'); model=$(echo \"$input\" | jq -r '.model.display_name // \"\"'); used=$(echo \"$input\" | jq -r '.context_window.used_percentage // empty'); user=$(whoami); host=$(hostname -s); short_cwd=\"${cwd/#$HOME/\\~}\"; ctx_str=$([ -n \"$used\" ] && echo \"ctx: ${used}%\" || echo \"ctx: --\"); printf \"\\033[1;34m%s@%s\\033[0m  \\033[1;32m%s\\033[0m  |  %s  %s\" \"$user\" \"$host\" \"$short_cwd\" \"$model\" \"$ctx_str\""
+  },
+  "enabledPlugins": {
+    "clangd-lsp@claude-plugins-official": true
+  },
+  "effortLevel": "high",
+  "voice": {
+    "enabled": true,
+    "mode": "hold"
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "voiceEnabled": true
 }
