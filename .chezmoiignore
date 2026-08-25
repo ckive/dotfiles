@@ -5,6 +5,14 @@
 # Repo docs live in the source dir only — never apply them into $HOME.
 README.md
 LICENSE
+TERMINAL-SHORTCUTS.md
+
+# ---- herdr: ephemeral runtime state, never tracked ----
+.config/herdr/*.log
+.config/herdr/*.sock
+.config/herdr/session.json
+.config/herdr/release-notes.json
+.config/herdr/.plugins.lock
 
 .DS_Store
 **/.DS_Store
