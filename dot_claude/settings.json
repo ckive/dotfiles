@@ -48,6 +48,10 @@
           {
             "type": "command",
             "command": "$HOME/.local/bin/claude-hook-chezmoi-add"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.local/bin/claude-hook-shortcuts-reminder"
           }
         ]
       }
