@@ -7,7 +7,7 @@
   "permissions": {
     "defaultMode": "default"
   },
-  "model": "haiku",
+  "model": "sonnet",
   "hooks": {
     "SessionStart": [
       {
