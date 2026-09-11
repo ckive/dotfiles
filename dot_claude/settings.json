@@ -7,7 +7,7 @@
   "permissions": {
     "defaultMode": "default"
   },
-  "model": "opus",
+  "model": "sonnet",
   "hooks": {
     "SessionStart": [
       {
@@ -87,11 +87,11 @@
     "clangd-lsp@claude-plugins-official": true
   },
   "effortLevel": "high",
+  "autoCompactWindow": 300000,
   "voice": {
     "enabled": true,
     "mode": "hold"
   },
   "skipDangerousModePermissionPrompt": true,
-  "voiceEnabled": true,
-  "autoCompactWindow": 300000
+  "voiceEnabled": true
 }
