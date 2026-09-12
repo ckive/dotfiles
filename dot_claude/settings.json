@@ -8,6 +8,7 @@
     "defaultMode": "default"
   },
   "model": "sonnet",
+  "bashOutputMaxChars": 8000,
   "hooks": {
     "SessionStart": [
       {
