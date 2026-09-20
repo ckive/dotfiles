@@ -9,6 +9,9 @@ trusted_hash = "sha256:6eb9860cc86eed81678fe564f01a03eb2e7bbdad0b5b7d6806157f04a
 [hooks.state."/Users/dan/.codex/hooks.json:pre_tool_use:1:0"]
 trusted_hash = "sha256:2541e75bbd0fe2e8837adb85b589dec23f5ff1a6395d0093f0a6249d0f2606e2"
 enabled = true
+
+[desktop]
+followUpQueueMode = "steer"
 # ~/.codex/config.toml — OpenAI Codex CLI settings.
 #
 # SCAFFOLD: codex is not installed on this machine yet. This file exists so the
