@@ -7,7 +7,7 @@
   "permissions": {
     "defaultMode": "default"
   },
-  "model": "opus",
+  "model": "fable",
   "hooks": {
     "SessionStart": [
       {
