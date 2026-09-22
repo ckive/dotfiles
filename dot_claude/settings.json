@@ -94,6 +94,6 @@
     "mode": "hold"
   },
   "skipDangerousModePermissionPrompt": true,
-  "autoCompactEnabled": false,
+  "autoCompactEnabled": true,
   "voiceEnabled": true
 }
