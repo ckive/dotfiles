@@ -50,7 +50,7 @@ echo "Backup: $bundle  (restore: git clone $bundle)"
 
 FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f \
   --msg-filter "perl -0777 -pe '$perl_filter'" \
-  --tag-name-filter cat -- --branches --tags
+  --tag-name-filter cat -- --branches --tags 2>&1 | tr '\r' '\n' | grep -v '^Rewrite ' | grep . || true
 
 git for-each-ref --format='%(refname)' refs/original | xargs -n1 git update-ref -d
 left=$(git log --branches --tags -i -E --grep="$grep_re" --format=%h | grep -c . || true)
