@@ -59,6 +59,10 @@ body is structured Given / When / Then.
   Markdown, justfile, shell).
 - **Conventional Commits** — `type(scope): description`; types `feat` `fix` `docs`
   `refactor` `test` `chore` `perf` `build` `ci`. Use this for every commit written for Dan.
+- **Succinct commits**: subject ≤72 chars says what changed. Body only when the why isn't
+  obvious from the diff, ≤3 lines. No narration, no file lists.
+- **No Claude authorship anywhere** — no `Co-Authored-By: Claude`, no "Generated with Claude
+  Code", in commits or PR bodies. Commits are Dan's. (`attribution` in settings.json enforces it.)
 - **No `lefthook`, no `pre-commit`, no `prek`.** Correctness is enforced by `just check`
   and CI, not git hooks.
 
