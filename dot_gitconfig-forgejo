@@ -1,0 +1,4 @@
+# Identity for repos whose remote is the self-hosted Forgejo (git.home.arpa).
+[user]
+	name = dan
+	email = ddysideacc@gmail.com
