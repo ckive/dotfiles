@@ -1,0 +1,31 @@
+#!/bin/bash
+# Stop (agent hosts only): keep one open PR from agent/<host> into main, so config
+# an agent adds (skills, agents, settings) reaches Dan only after he reviews it.
+#
+# Workstations exit immediately. Needs `gh` authenticated with the dotfiles PAT
+# (Ansible: gh auth login --with-token + gh auth setup-git). Fails open; never blocks.
+
+set -uo pipefail
+
+[ "{{ get . "role" | default "workstation" }}" = "agent" ] || exit 0
+command -v gh >/dev/null 2>&1 || exit 0
+command -v chezmoi >/dev/null 2>&1 || exit 0
+
+(
+  # Let the Stop re-add (same lock) commit and push first.
+  sleep 2
+  flock -w 30 "$HOME/.claude-backup.lock" true
+  host="$(hostname -s)"
+  branch="agent/$host"
+  cd "$(chezmoi source-path)" || exit 0
+  git fetch --quiet origin main || exit 0
+  [ "$(git rev-list --count origin/main..HEAD)" -gt 0 ] || exit 0
+  git push --quiet -u origin "HEAD:refs/heads/$branch" || exit 0
+  [ "$(gh pr list --head "$branch" --state open --json number -q length)" = "0" ] || exit 0
+  gh pr create --base main --head "$branch" \
+    --title "agent config: $host" \
+    --body "Claude config changes made by agents on \`$host\` (skills, agents, settings, hooks).
+Review and merge to roll them out to every machine. This PR updates itself; the branch is rebased onto main at each agent session start."
+) >/dev/null 2>&1 &
+
+exit 0

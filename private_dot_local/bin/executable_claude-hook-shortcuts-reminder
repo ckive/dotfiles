@@ -1,6 +1,6 @@
 #!/bin/bash
 # PostToolUse (Edit|Write): remind to update the terminal shortcuts cheatsheet
-# whenever kitty.conf or herdr's config.toml change.
+# whenever kitty.conf changes.
 #
 # Warn = exit 0 with {"systemMessage": ...}; never blocks. Fails open.
 
@@ -13,9 +13,9 @@ file="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // empty' 2>/dev/n
 [ -n "$file" ] || exit 0
 
 case "$file" in
-  "$HOME"/.config/kitty/kitty.conf|"$HOME"/.config/herdr/config.toml)
+  "$HOME"/.config/kitty/kitty.conf)
     jq -n '{
-      systemMessage: "Terminal keybinding file changed. Update ~/Documents/dotfiles/TERMINAL-SHORTCUTS.md to match, then chezmoi re-add the config (the cheatsheet itself has no $HOME target, so edit it directly in the dotfiles source dir)."
+      systemMessage: "kitty.conf changed. Update ~/Documents/dotfiles/TERMINAL-SHORTCUTS.md to match, then chezmoi re-add the config (the cheatsheet itself has no $HOME target, so edit it directly in the dotfiles source dir)."
     }'
     ;;
 esac

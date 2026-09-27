@@ -63,6 +63,10 @@
           {
             "type": "command",
             "command": "$HOME/.local/bin/claude-hook-stop-readd"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.local/bin/claude-hook-agent-pr"
           }
         ]
       }
@@ -73,7 +77,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "msg=$(cat | jq -r '.message // \"Claude Code needs your input\"'); osascript -e \"display notification \\\"$msg\\\" with title \\\"Claude Code\\\"\" >/dev/null 2>&1; exit 0"
+            "command": "$HOME/.local/bin/claude-notify"
           }
         ]
       }

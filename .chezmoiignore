@@ -7,13 +7,6 @@ README.md
 LICENSE
 TERMINAL-SHORTCUTS.md
 
-# ---- herdr: ephemeral runtime state, never tracked ----
-.config/herdr/*.log
-.config/herdr/*.sock
-.config/herdr/session.json
-.config/herdr/release-notes.json
-.config/herdr/.plugins.lock
-
 .DS_Store
 **/.DS_Store
 
@@ -58,7 +51,7 @@ TERMINAL-SHORTCUTS.md
 .kimi-code/user-history/**
 .kimi-code/workspaces.json
 
-# ---- Codex (scaffolded; not yet installed) ----
+# ---- Codex ----
 .codex/auth.json
 .codex/history.jsonl
 .codex/log/**

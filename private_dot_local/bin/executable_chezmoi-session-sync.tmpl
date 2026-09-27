@@ -4,6 +4,27 @@
 
 command -v chezmoi >/dev/null 2>&1 || exit 0
 
+ROLE="{{ get . "role" | default "workstation" }}"
+
+# Agent hosts: the source tracks agent/<host>. Rebase it onto main so Dan's merged
+# changes arrive and the open PR stays current. Never blocks an unattended session:
+# on conflict, abort and keep running on the last good config.
+if [ "$ROLE" = "agent" ]; then
+  branch="agent/$(hostname -s)"
+  chezmoi git -- rebase --abort >/dev/null 2>&1 || true
+  chezmoi git -- fetch --quiet origin 2>/dev/null \
+    || { echo "[chezmoi-sync] fetch failed (network?), skipping" >&2; exit 0; }
+  chezmoi git -- checkout --quiet -B "$branch" 2>/dev/null
+  if chezmoi git -- rebase --quiet origin/main >/dev/null 2>&1; then
+    chezmoi git -- push --quiet --force-with-lease -u origin "$branch" >/dev/null 2>&1 || true
+  else
+    chezmoi git -- rebase --abort >/dev/null 2>&1 || true
+    echo "[chezmoi-sync] $branch conflicts with main; resolve in the PR. Using current config." >&2
+  fi
+  chezmoi apply --force >/dev/null 2>&1 || echo "[chezmoi-sync] chezmoi apply failed" >&2
+  exit 0
+fi
+
 # Detect stale rebase from previous failed sync
 if chezmoi git -- status 2>&1 | grep -q "rebase in progress"; then
   echo "[chezmoi-sync] Previous rebase still in progress" >&2

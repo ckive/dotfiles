@@ -1,0 +1,19 @@
+#!/bin/bash
+# Notification hook: desktop notification where the OS has one; silent elsewhere
+# (headless agent hosts rely on Remote Control push instead). Never blocks.
+#
+# The message is passed as an argument, never spliced into the script, so quotes
+# in it cannot break (or inject into) the AppleScript.
+
+command -v jq >/dev/null 2>&1 || exit 0
+msg="$(jq -r '.message // "Claude Code needs your input"' 2>/dev/null)"
+
+if command -v osascript >/dev/null 2>&1; then
+  osascript -e 'on run argv' \
+            -e 'display notification (item 1 of argv) with title "Claude Code"' \
+            -e 'end run' "$msg" >/dev/null 2>&1
+elif command -v notify-send >/dev/null 2>&1 && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+  notify-send "Claude Code" "$msg" >/dev/null 2>&1
+fi
+
+exit 0

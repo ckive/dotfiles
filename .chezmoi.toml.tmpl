@@ -7,7 +7,19 @@
 
     chezmoi init --apply --source ~/Documents/dotfiles git@github.com:ckive/dotfiles.git
 */ -}}
+{{- $role := promptStringOnce . "role" "role" "workstation" -}}
+{{- if not (has $role (list "workstation" "agent")) -}}
+{{-   fail (printf "role must be workstation or agent, got %q" $role) -}}
+{{- end }}
 sourceDir = {{ printf "%s/Documents/dotfiles" .chezmoi.homeDir | quote }}
+
+# role decides only git flow and which role-gated hook scripts act:
+#   workstation — source tracks main; autoPush publishes directly.
+#   agent       — source tracks agent/<hostname>; autoPush goes to that branch and
+#                 claude-hook-agent-pr opens a PR for Dan. Nothing reaches main unreviewed.
+# Non-interactive (Ansible): chezmoi init --apply --promptString role=agent ...
+[data]
+    role = {{ $role | quote }}
 
 [git]
     autoCommit = true

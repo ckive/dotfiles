@@ -17,6 +17,32 @@ across machines automatically. Adapted from
 | Pull | `SessionStart` hook runs `~/.local/bin/chezmoi-session-sync` (chezmoi has **no** native autoPull) |
 | Capture | `PostToolUse` hook auto-adds any edited `.claude/` file; `Stop` hook runs `chezmoi re-add` |
 
+## Machine roles
+
+One data var, `role`, set once at `chezmoi init`. It changes only the git flow and which
+role-gated hooks act — every Claude config file is identical on every machine.
+
+| Role | Source branch | Pushes to | Role-gated hooks |
+|---|---|---|---|
+| `workstation` (default) | `main` | `main` directly | none (they exit immediately) |
+| `agent` (e.g. dev01) | `agent/<hostname>` | that branch; `claude-hook-agent-pr` keeps one PR open into `main` | `guard-bash` blocks any push to `main`/`master`; session sync rebases onto `main` and never blocks |
+
+Agent-made config (new skills, agents, settings) reaches other machines only after Dan
+merges the `agent config: <host>` PR. The main-push block is hook-enforced only: GitHub
+Free cannot protect branches on private repos.
+
+Claude config comes from three layers — keep each thing in exactly one:
+
+| Layer | Holds | Managed by |
+|---|---|---|
+| `~/.claude/settings.json` etc. (this repo) | personal settings, hooks, skills, agents — all machines | chezmoi |
+| `/etc/claude-code/managed-settings.json` | agent-host policy: permission mode, bridge/telemetry hooks, fleet plugins | Ansible (`homelab-infra`, role `agent_host`) |
+| Plugin marketplace `homelab/claude-plugins` | shared homelab skills, hooks, MCP config | Forgejo repo, enabled by either layer above |
+
+Portability rule: no OS templating inside Claude config. Hook scripts handle OS
+differences themselves (e.g. `claude-notify` uses `osascript` on macOS, `notify-send` with a
+display, else nothing).
+
 ## New machine
 
 `sourceDir` lives in the config file, but on a fresh machine that config doesn't exist until
@@ -26,6 +52,17 @@ after `init` — so the non-default source path **must** be passed explicitly th
 brew install chezmoi flock jq
 chezmoi init --apply --source ~/Documents/dotfiles git@github.com:ckive/dotfiles.git
 ```
+
+Agent host (done by Ansible; needs `gh` authenticated with the dotfiles-scoped PAT and
+`gh auth setup-git`, plus `flock`, `jq`):
+
+```bash
+chezmoi init --apply --promptString role=agent \
+  --source ~/Documents/dotfiles https://github.com/ckive/dotfiles.git
+```
+
+Existing machine picking up the `role` var for the first time: `chezmoi init` (answer
+`workstation`). Until then templates default to `workstation`.
 
 `flock` and `jq` are genuine dependencies, not optional: the auto-add and Stop hooks call
 `flock` for locking, and every hook parses its stdin JSON with `jq`. macOS ships neither
@@ -67,8 +104,8 @@ project directory does not put 20GB in this repo.
 | `private_dot_config/shell/common.sh` | `~/.config/shell/common.sh` | aliases, `lllm()` switcher, `claude()` wrapper |
 | `dot_claude/` | `~/.claude/` | settings, hooks, agents, skills, commands, rules |
 | `dot_kimi-code/tui.toml` | `~/.kimi-code/tui.toml` | client prefs only |
-| `dot_codex/` | `~/.codex/` | scaffold; codex not yet installed |
-| `dot_local/bin/` | `~/.local/bin/` | hook scripts (`executable_` = mode 755) |
+| `dot_codex/` | `~/.codex/` | Codex settings, `AGENTS.md` |
+| `private_dot_local/bin/` | `~/.local/bin/` | hook scripts (`executable_` = mode 755, `.tmpl` = rendered with `role`) |
 
 Naming: `dot_` → `.`, `private_` → chmod 600, `executable_` → chmod 755.
 

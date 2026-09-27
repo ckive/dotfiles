@@ -44,4 +44,17 @@ stripped="$(printf '%s' "$cmd" | sed 's/--force-with-lease[^ ]*//g')"
 printf '%s' "$stripped" | grep -qE 'git\s+push\s+[^;&|]*(--force|\s-f(\s|$))' \
   && block "git push --force (use --force-with-lease instead)"
 
+# Agent hosts: never push to main/master, in any repo. Changes reach main only via a
+# reviewed PR. Hook-enforced only: GitHub Free cannot protect branches on private repos.
+if [ "{{ get . "role" | default "workstation" }}" = "agent" ] \
+   && printf '%s' "$cmd" | grep -qE 'git\s+([^;&|]*\s)?push|chezmoi\s+git\s+--\s+push'; then
+  printf '%s' "$cmd" | grep -qE 'push[^;&|]*[[:space:]:/](main|master)([[:space:];&|]|$)' \
+    && block "push to main/master from an agent host (open a PR instead)"
+  cwd="$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)"
+  cur="$(git -C "${cwd:-.}" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+  case "$cur" in
+    main|master) block "push while on $cur from an agent host (work on a branch)" ;;
+  esac
+fi
+
 exit 0

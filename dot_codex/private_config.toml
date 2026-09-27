@@ -12,10 +12,5 @@ enabled = true
 
 [desktop]
 followUpQueueMode = "steer"
-# ~/.codex/config.toml — OpenAI Codex CLI settings.
-#
-# SCAFFOLD: codex is not installed on this machine yet. This file exists so the
-# path is tracked by chezmoi from day one; populate it after `codex` is installed
-# and has written its own defaults.
-#
+# ~/.codex/config.toml — OpenAI Codex CLI settings (managed by chezmoi).
 # Secrets (~/.codex/auth.json) are excluded via .chezmoiignore — never track them.
