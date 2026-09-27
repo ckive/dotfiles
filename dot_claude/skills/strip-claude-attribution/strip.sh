@@ -32,8 +32,7 @@ rewritten=$(git rev-list --count "$first"^..HEAD 2>/dev/null || git rev-list --c
 echo
 echo "Rewriting changes the hash of ~$rewritten commit(s) on HEAD's line (everything since $(git rev-parse --short "$first"))."
 [ "$pushed" -gt 0 ] && echo "WARNING: $pushed of them are already on a remote: needs push --force-with-lease; protected branches will refuse."
-git rev-list --count --branches --tags --not HEAD >/dev/null
-[ "$(git log -1 --format=%G? "$first")" != N ] && echo "WARNING: signed commits in range lose their signatures."
+git log --branches --tags --format=%G? | grep -qv N && echo "WARNING: rewritten commits that were signed lose their signatures."
 
 if [ "$apply" -eq 0 ]; then
   echo; echo "Dry run. Re-run with --apply to rewrite."
