@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# agent-dispatch <refine|build|revise|comment|stop|done|prune> <ITEM-ID|all>
+#
+# Called by pfi (rule action notify.exec) with the event JSON on stdin; see
+# docs/plans/agent-workflow.md. One worktree and one tmux session per item, both named after it.
+# The session runs interactive `claude`, so Remote Control shows it and Dan can attach
+# (`tmux attach -t WINSVIEWER-12`). A running session gets new instructions pasted in, so a
+# build continues with its refine context. Returns at once; the work happens in tmux.
+# `done` (PR merged) only marks the item: its session stays for follow-up steps after merge.
+# `prune <ID|all>` (run by hand) ends marked items' sessions and removes their worktree and local
+# branch if nothing is left uncommitted; Claude's transcripts in ~/.claude/projects are kept.
+set -euo pipefail
+
+job=${1:?job} id=${2:?item id}
+payload=$(cat)
+work=${AGENT_WORK_DIR:-/srv/work}
+forge=${AGENT_FORGE_URL:-https://git.home.arpa}
+done_dir="$work/done"
+mkdir -p "$work/wt" "$done_dir"
+
+log() { printf '%s %s %s: %s\n' "$(date -Is)" "$id" "$job" "$*" >>"$work/dispatch.log"; echo "$*"; }
+has_session() { tmux has-session -t "=$id" 2>/dev/null; }
+
+# Bracketed paste, so multi-line text arrives as one message, then submit. A pending question
+# menu takes keystrokes, not a message, so close it first; the text then arrives as a reply.
+say() {
+  if tmux capture-pane -p -t "=$id:" | grep -q 'Enter to select.*Esc to cancel'; then
+    tmux send-keys -t "=$id:" Escape
+    sleep 1
+  fi
+  tmux set-buffer -b "pfi-$id" -- "$1"
+  tmux paste-buffer -p -d -b "pfi-$id" -t "=$id:"
+  sleep 0.5
+  tmux send-keys -t "=$id:" Enter
+}
+
+# Unattended sessions can't answer Claude's "trust this folder?" prompt; these are our own worktrees.
+trust() {
+  local f="$HOME/.claude.json" tmp
+  [ -f "$f" ] || echo '{}' >"$f"
+  tmp=$(mktemp "$f.XXXXXX")
+  jq --arg p "$1" '.projects[$p] = ((.projects[$p] // {}) + {hasTrustDialogAccepted: true})' "$f" >"$tmp"
+  mv "$tmp" "$f"
+}
+
+worktree() {
+  local repo main wt name slug branch
+  repo=$(jq -r '.event.repo // empty' <<<"$payload")
+  [ -n "$repo" ] || { log "no linked repo in the event"; exit 1; }
+  main="$work/${repo//\//__}" wt="$work/wt/$id"
+  if [ ! -d "$main/.git" ]; then
+    git clone -q "$forge/$repo.git" "$main"
+    git -C "$main" config commit.gpgsign false # Dan's signing key never leaves his machine
+  fi
+  git -C "$main" fetch -q origin
+  if [ ! -d "$wt" ]; then
+    name=$(jq -r '.items[0].name // ""' <<<"$payload")
+    slug=$(tr '[:upper:]' '[:lower:]' <<<"$name" | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-40)
+    branch="$id${slug:+-$slug}"
+    if git -C "$main" show-ref -q --verify "refs/heads/$branch"; then
+      git -C "$main" worktree add -q "$wt" "$branch"
+    else
+      git -C "$main" worktree add -q -b "$branch" "$wt" origin/main
+    fi
+  fi
+  printf '%s' "$wt"
+}
+
+run() {
+  if has_session; then
+    say "$1"
+    log "sent to the running session"
+  else
+    local wt name title
+    wt=$(worktree)
+    name=$(jq -r '.items[0].name // ""' <<<"$payload")
+    trust "$wt"
+    # Named after the item, so /resume and Remote Control show "HL-1: <title>", not a UUID.
+    # No AskUserQuestion: its menu can't be answered by pasting a Plane comment.
+    title="$id${name:+: $name}"
+    tmux new-session -d -s "$id" -c "$wt" \
+      "claude --disallowedTools AskUserQuestion --name $(printf '%q' "$title") $(printf '%q' "$1")"
+    log "started a session in $wt"
+  fi
+}
+
+end_session() {
+  has_session || return 0
+  tmux send-keys -t "=$id:" Escape
+  sleep 1
+  tmux kill-session -t "=$id" || true
+  log "session ended"
+}
+
+# `git worktree remove` without --force refuses a dirty worktree, so stray work is never lost.
+remove_worktree() {
+  local wt="$work/wt/$id" main branch
+  [ -d "$wt" ] || return 0
+  main=$(git -C "$wt" rev-parse --path-format=absolute --git-common-dir)
+  branch=$(git -C "$wt" branch --show-current)
+  if git -C "$wt" worktree remove "$wt"; then
+    # Squash merges leave the branch unmerged in git's eyes, hence -D.
+    [ -z "$branch" ] || git --git-dir="$main" branch -q -D "$branch"
+    log "worktree and branch $branch removed"
+  else
+    log "worktree kept in $wt: uncommitted changes"
+  fi
+}
+
+comment=$(jq -r '.event.context.comment.text // empty' <<<"$payload")
+# Dan's comment answers an open question or adjusts the work; either way the agent carries on
+# where it is. Re-adding agent-refine is the only way to restart from scratch.
+adjust="Dan commented on Plane: $comment
+If this answers your open question, carry on. Otherwise adjust your spec or work to it in place (see the skill's **Dan's comments**); don't rerun /refine."
+# New work on a merged item (e.g. reopened) takes it off the prune list.
+case $job in refine | build | revise) rm -f "$done_dir/$id" ;; esac
+case $job in
+  refine) run "/refine $id" ;;
+  build) run "/build $id" ;;
+  revise) run "/build $id — Dan requested changes on the PR. Go to step 6: read the review (get_pr) and address it." ;;
+  comment)
+    if has_session; then
+      say "$adjust"
+      log "comment delivered"
+    elif [ -d "$work/wt/$id" ]; then
+      run "Resume $id (check its state with get_item). $adjust"
+    else
+      log "no agent has worked on this item; comment ignored"
+    fi
+    ;;
+  stop) end_session ;; # worktree kept: the item may be reopened
+  done)
+    touch "$done_dir/$id"
+    log "merged; session kept until \`agent-dispatch prune\`"
+    ;;
+  prune)
+    [ "$id" = all ] && ids=$(ls "$done_dir") || ids=$id
+    for id in $ids; do
+      [ -e "$done_dir/$id" ] || { log "not merged; not pruned"; continue; }
+      end_session
+      remove_worktree
+      [ -d "$work/wt/$id" ] || rm -f "$done_dir/$id"
+    done
+    ;;
+  *) echo "unknown job: $job" >&2; exit 2 ;;
+esac
