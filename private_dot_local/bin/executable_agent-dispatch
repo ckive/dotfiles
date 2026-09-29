@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agent-dispatch <refine|build|revise|comment|stop|done|prune> <ITEM-ID|all>
+# agent-dispatch <refine|build|review|revise|comment|stop|done|prune> <ITEM-ID|all> [yolo]
 #
 # Called by pfi (rule action notify.exec) with the event JSON on stdin; see
 # docs/plans/agent-workflow.md. One worktree and one tmux session per item, both named after it.
@@ -9,9 +9,11 @@
 # `done` (PR merged) only marks the item: its session stays for follow-up steps after merge.
 # `prune <ID|all>` (run by hand) ends marked items' sessions and removes their worktree and local
 # branch if nothing is left uncommitted; Claude's transcripts in ~/.claude/projects are kept.
+# `review` (yolo mode) starts a fresh reviewer session, "<ID>-review", on a detached checkout of
+# the PR's head; a newer push replaces it. A trailing `yolo` tells the agent to run hands-free.
 set -euo pipefail
 
-job=${1:?job} id=${2:?item id}
+job=${1:?job} id=${2:?item id} mode=${3:-}
 payload=$(cat)
 work=${AGENT_WORK_DIR:-/srv/work}
 forge=${AGENT_FORGE_URL:-https://git.home.arpa}
@@ -19,19 +21,20 @@ done_dir="$work/done"
 mkdir -p "$work/wt" "$done_dir"
 
 log() { printf '%s %s %s: %s\n' "$(date -Is)" "$id" "$job" "$*" >>"$work/dispatch.log"; echo "$*"; }
-has_session() { tmux has-session -t "=$id" 2>/dev/null; }
+sess=$id # the tmux session the helpers act on
+has_session() { tmux has-session -t "=$sess" 2>/dev/null; }
 
 # Bracketed paste, so multi-line text arrives as one message, then submit. A pending question
 # menu takes keystrokes, not a message, so close it first; the text then arrives as a reply.
 say() {
-  if tmux capture-pane -p -t "=$id:" | grep -q 'Enter to select.*Esc to cancel'; then
-    tmux send-keys -t "=$id:" Escape
+  if tmux capture-pane -p -t "=$sess:" | grep -q 'Enter to select.*Esc to cancel'; then
+    tmux send-keys -t "=$sess:" Escape
     sleep 1
   fi
-  tmux set-buffer -b "pfi-$id" -- "$1"
-  tmux paste-buffer -p -d -b "pfi-$id" -t "=$id:"
+  tmux set-buffer -b "pfi-$sess" -- "$1"
+  tmux paste-buffer -p -d -b "pfi-$sess" -t "=$sess:"
   sleep 0.5
-  tmux send-keys -t "=$id:" Enter
+  tmux send-keys -t "=$sess:" Enter
 }
 
 # Unattended sessions can't answer Claude's "trust this folder?" prompt; these are our own worktrees.
@@ -43,16 +46,23 @@ trust() {
   mv "$tmp" "$f"
 }
 
-worktree() {
-  local repo main wt name slug branch
+# The repo's main clone, fetched.
+clone() {
+  local repo main
   repo=$(jq -r '.event.repo // empty' <<<"$payload")
   [ -n "$repo" ] || { log "no linked repo in the event"; exit 1; }
-  main="$work/${repo//\//__}" wt="$work/wt/$id"
+  main="$work/${repo//\//__}"
   if [ ! -d "$main/.git" ]; then
     git clone -q "$forge/$repo.git" "$main"
     git -C "$main" config commit.gpgsign false # Dan's signing key never leaves his machine
   fi
   git -C "$main" fetch -q origin
+  printf '%s' "$main"
+}
+
+worktree() {
+  local main wt name slug branch
+  main=$(clone) wt="$work/wt/$id"
   if [ ! -d "$wt" ]; then
     name=$(jq -r '.items[0].name // ""' <<<"$payload")
     slug=$(tr '[:upper:]' '[:lower:]' <<<"$name" | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-40)
@@ -71,27 +81,45 @@ run() {
     say "$1"
     log "sent to the running session"
   else
-    local wt name title
-    wt=$(worktree)
-    name=$(jq -r '.items[0].name // ""' <<<"$payload")
-    trust "$wt"
-    # Named after the item, so /resume and Remote Control show "HL-1: <title>", not a UUID.
-    # No AskUserQuestion: its menu can't be answered by pasting a Plane comment.
-    # --add-dir: the skills edit the chezmoi source; outside the worktree, file tools would stop
-    # at a permission prompt nobody sees.
-    title="$id${name:+: $name}"
-    src=$(chezmoi source-path 2>/dev/null || true)
-    tmux new-session -d -s "$id" -c "$wt" \
-      "claude --disallowedTools AskUserQuestion ${src:+--add-dir $(printf '%q' "$src")} --name $(printf '%q' "$title") $(printf '%q' "$1")"
-    log "started a session in $wt"
+    start "$(worktree)" "$1"
   fi
+}
+
+# start <dir> <prompt>: a new interactive session $sess in <dir>.
+start() {
+  local wt=$1 name title
+  name=$(jq -r '.items[0].name // ""' <<<"$payload")
+  trust "$wt"
+  # Named after the item, so /resume and Remote Control show "HL-1: <title>", not a UUID.
+  # No AskUserQuestion: its menu can't be answered by pasting a Plane comment.
+  # --add-dir: the skills edit the chezmoi source; outside the worktree, file tools would stop
+  # at a permission prompt nobody sees.
+  title="$sess${name:+: $name}"
+  src=$(chezmoi source-path 2>/dev/null || true)
+  tmux new-session -d -s "$sess" -c "$wt" \
+    "claude --disallowedTools AskUserQuestion ${src:+--add-dir $(printf '%q' "$src")} --name $(printf '%q' "$title") $(printf '%q' "$2")"
+  log "started a session in $wt"
+}
+
+# A fresh reviewer each time: its verdict must cover the PR's current head and nothing else.
+review() {
+  local main wt="$work/wt/$id-review" head sha
+  sess="$id-review"
+  end_session
+  main=$(clone)
+  [ -d "$wt" ] && git -C "$main" worktree remove --force "$wt" # a read-only checkout
+  head=$(jq -r '.event.context.pr.head // .pulls[0].head // empty' <<<"$payload")
+  sha=$(jq -r '.event.context.pr.sha // empty' <<<"$payload")
+  git -C "$main" worktree add -q --detach "$wt" "${sha:-origin/$head}"
+  start "$wt" "/review-item $id${yolo:+
+$yolo}"
 }
 
 end_session() {
   has_session || return 0
-  tmux send-keys -t "=$id:" Escape
+  tmux send-keys -t "=$sess:" Escape
   sleep 1
-  tmux kill-session -t "=$id" || true
+  tmux kill-session -t "=$sess" || true
   log "session ended"
 }
 
@@ -115,12 +143,24 @@ comment=$(jq -r '.event.context.comment.text // empty' <<<"$payload")
 # where it is. Re-adding agent-refine is the only way to restart from scratch.
 adjust="Dan commented on Plane: $comment
 If this answers your open question, carry on. Otherwise adjust your spec or work to it in place (see the skill's **Dan's comments**); don't rerun /refine."
+yolo=""
+[ "$mode" = yolo ] && yolo="Yolo mode: Dan is trusting you to take $id all the way on your own, and we believe you can. Don't stop for questions: pick your recommended option, post it as **Assumed:** … and keep going. Post short progress notes with comment_item, and a **Roadblock:** … trying … note when something fights you, then work through it. Keep going until the objective is met."
 # New work on a merged item (e.g. reopened) takes it off the prune list.
 case $job in refine | build | revise) rm -f "$done_dir/$id" ;; esac
 case $job in
-  refine) run "/refine $id" ;;
-  build) run "/build $id" ;;
-  revise) run "/build $id — Dan requested changes on the PR. Go to step 6: read the review (get_pr) and address it." ;;
+  refine) run "/refine $id${yolo:+
+$yolo}" ;;
+  build) run "/build $id${yolo:+
+$yolo}" ;;
+  revise)
+    if [ -n "$yolo" ]; then
+      run "/build $id — the reviewer agent requested changes. Go to step 6: its findings are the latest **Review:** comment on the item (get_item); address each one.
+$yolo"
+    else
+      run "/build $id — Dan requested changes on the PR. Go to step 6: read the review (get_pr) and address it."
+    fi
+    ;;
+  review) review ;;
   comment)
     if has_session; then
       say "$adjust"
@@ -131,7 +171,10 @@ case $job in
       log "no agent has worked on this item; comment ignored"
     fi
     ;;
-  stop) end_session ;; # worktree kept: the item may be reopened
+  stop) # worktree kept: the item may be reopened
+    end_session
+    sess="$id-review" end_session
+    ;;
   done)
     touch "$done_dir/$id"
     log "merged; session kept until \`agent-dispatch prune\`"
@@ -142,6 +185,9 @@ case $job in
       [ -e "$done_dir/$id" ] || { log "not merged; not pruned"; continue; }
       end_session
       remove_worktree
+      sess="$id-review" end_session
+      rw="$work/wt/$id-review"
+      [ ! -d "$rw" ] || git -C "$rw" worktree remove --force "$rw"
       [ -d "$work/wt/$id" ] || rm -f "$done_dir/$id"
     done
     ;;
