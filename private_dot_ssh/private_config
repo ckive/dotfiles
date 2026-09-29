@@ -1,0 +1,55 @@
+# Managed by chezmoi (dotfiles: private_dot_ssh/private_config). Keys are not in chezmoi.
+#
+# Keys:
+#   id_gh_sshm1mac       GitHub (ckive)
+#   id_ed25519_signing   Forgejo git + commit signing (gitconfig user.signingkey)
+#   homelab_ed25519      homelab guests (also Ansible: homelab-infra/ansible/ansible.cfg)
+#   racknerd             RackNerd VPS
+
+# --- Git hosting -------------------------------------------------------------
+Host github.com
+  IdentityFile ~/.ssh/id_gh_sshm1mac
+  IdentitiesOnly yes
+
+Host git.home.arpa
+  Port 2222
+  User git
+  IdentityFile ~/.ssh/id_ed25519_signing
+  IdentitiesOnly yes
+
+# --- Homelab (homelab-infra/docs/network.md) ---------------------------------
+# `ssh svc01` etc. HostName is the IP, so these work even when DNS is down.
+Host svc01 svc01.home.arpa
+  HostName 192.168.1.31
+Host ci01 ci01.home.arpa
+  HostName 192.168.1.32
+Host dev01 dev01.home.arpa
+  HostName 192.168.1.33
+Host nas01 nas01.home.arpa
+  HostName 192.168.1.34
+# LXC containers have only root.
+Host dns01 dns01.home.arpa
+  HostName 192.168.1.2
+  User root
+Host ts01 ts01.home.arpa
+  HostName 192.168.1.3
+  User root
+
+# Everything homelab except Forgejo's git endpoint: VMs log in as admin.
+Host svc01 ci01 dev01 nas01 dns01 ts01 *.home.arpa 192.168.1.2 192.168.1.3 192.168.1.3? !git.home.arpa
+  User admin
+  IdentityFile ~/.ssh/homelab_ed25519
+  IdentitiesOnly yes
+
+# --- VPS ---------------------------------------------------------------------
+Host racknerd
+  HostName 23.94.151.94
+  User root
+  IdentityFile ~/.ssh/racknerd
+  IdentitiesOnly yes
+
+# --- Defaults ----------------------------------------------------------------
+Host *
+  IgnoreUnknown UseKeychain
+  AddKeysToAgent yes
+  UseKeychain yes
