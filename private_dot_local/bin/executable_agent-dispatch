@@ -77,9 +77,12 @@ run() {
     trust "$wt"
     # Named after the item, so /resume and Remote Control show "HL-1: <title>", not a UUID.
     # No AskUserQuestion: its menu can't be answered by pasting a Plane comment.
+    # --add-dir: the skills edit the chezmoi source; outside the worktree, file tools would stop
+    # at a permission prompt nobody sees.
     title="$id${name:+: $name}"
+    src=$(chezmoi source-path 2>/dev/null || true)
     tmux new-session -d -s "$id" -c "$wt" \
-      "claude --disallowedTools AskUserQuestion --name $(printf '%q' "$title") $(printf '%q' "$1")"
+      "claude --disallowedTools AskUserQuestion ${src:+--add-dir $(printf '%q' "$src")} --name $(printf '%q' "$title") $(printf '%q' "$1")"
     log "started a session in $wt"
   fi
 }
