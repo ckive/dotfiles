@@ -25,8 +25,10 @@ list, secrets, guardrails), except "Where and as whom you run": you are **not** 
    restarts, the risk, and how to verify it. Anything needing host root: exact commands for Dan.
 
 ## Deploy
-After merge, Dan runs the deploy command from the PR on the workstation. Automated deploy after merge is
-planned: [`docs/plans/homelab-infra-forgejo.md`](docs/plans/homelab-infra-forgejo.md).
+After merge, svc01 redeploys changed `docker/svc01/<stack>/` for caddy, dockhand, homepage and plane
+within minutes and sets commit status `deploy/svc01` ([`deploy_agent`](ansible/roles/deploy_agent/README.md)).
+Everything else (roles, vars, the forgejo stack, other hosts) Dan deploys by hand with the command your
+PR names; the status then says `manual deploy needed`. Don't add CI that deploys.
 
 ## Not allowed
 - Adding secrets anywhere in the repo, or to CI; adding CI jobs that deploy or reach hosts.
