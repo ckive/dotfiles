@@ -87,8 +87,3 @@ body is structured Given / When / Then.
 - **Stage by path.** Never `git add -A`/`.`/`commit -a`; never commit files you didn't create
   in this task (plan files, `*.db`, `.bak`). Check `git status` before committing.
   (`claude-hook-guard-bash` enforces the first and `*.db`.)
-
-## Project-specific
-
-- `~/Desktop/projects/winner/wins-ingestion` is deliberately **not** a git repo. Don't `git init` it,
-  don't offer to commit, don't propose CI or commit conventions there.
