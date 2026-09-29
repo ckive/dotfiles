@@ -51,7 +51,7 @@ What exists today; for bugs the cause (`file:line`). Overlaps <ID>, if any.
    - Write each acceptance criterion in EARS form, so it can be tested.
    - Name the behaviour tests the repo's BDD way: the scenario goes in the name, with no Gherkin.
 7. `comment_item`: three lines covering what you found, the spec's gist and any open questions.
-8. `update_item remove_labels=["agent-refine"]`. Leave the item in Refining. Then stop and wait: Dan reads the spec and adds `agent-build`.
+8. `update_item remove_labels=["agent-refine"]`. Leave the item in Refining. Then stop and wait: Dan reads the spec and adds `agent-build` (in **Yolo mode**, pfi does).
 
 ## Plan track
 
@@ -72,6 +72,13 @@ The design in a few bullets: components, data flow, the key choices and why.
 
 - Number the acceptance criteria, so each slice can name the ones it satisfies. Every criterion belongs to one slice.
 - Ask every product decision through **Asking Dan**, as early as you can, and keep going until **Open questions** is `none`. Dan approves the spec by adding `agent-build`, as on the spec track.
+
+## Yolo mode
+
+If the item has `yolo` or `yolo-merge`, Dan has handed it over: take it all the way yourself. We believe you can.
+- Never wait on Dan. For each question you would ask, pick your recommended option, `comment_item "**Assumed:** …"` with a one-line reason, and carry on. Leave **Open questions** as `none`, and never add `needs-dan`.
+- Dan's comments still arrive and still adjust the work, as in **Dan's comments**.
+- Step 8 still just removes `agent-refine`. pfi then adds `agent-build` and the build starts in this session; don't add it yourself.
 
 ## Asking Dan
 

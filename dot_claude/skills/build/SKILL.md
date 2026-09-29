@@ -24,4 +24,13 @@ If this session already refined or built the item, its spec and code are in your
 7. **When Dan comments on Plane** ("Dan commented on Plane: …"): apply it to the work in progress. If it changes scope or behaviour, update the spec's affected sections first (see **Dan's comments** in the refine skill). If a PR is open, push and `comment_item` what changed.
 8. When done, run `update_item remove_labels=["agent-build"]`, post a two-line summary with `comment_item`, then stop and wait.
 
+## Yolo mode
+
+If the item has `yolo` or `yolo-merge`, you own it end to end, and we believe you can get it there. Work through whatever gets in the way.
+- Don't stop for questions: pick your recommended option, `comment_item "**Assumed:** …"`, and keep going (never `needs-dan`).
+- Post a short progress note with `comment_item` at each phase: tests red, green, PR opened, each revision. When something fights you, post `**Roadblock:** <what> — trying <next>` and keep at it. Dan reads these in the item's Slack thread and may steer.
+- `Overlaps <X>` doesn't block you: if X has an open PR, stack on its branch; otherwise build on `main` and say so in a comment.
+- After the PR opens, a reviewer agent reviews every push. If it wants changes you get a revise prompt pointing at its `**Review:**` comment: address each finding (step 6 applies, reading that comment instead of `get_pr`), push, and set `state="Review"`. Keep iterating until it approves, with no round limit.
+- With `yolo-merge`, pfi merges once the reviewer approves. Never merge yourself.
+
 Never merge. Never push to `main`. Never force-push a branch that has a PR open unless Dan asked for it.
