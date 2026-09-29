@@ -50,6 +50,25 @@ body is structured Given / When / Then.
 - When Dan describes a feature as a scenario, write the behavior test **first** and
   confirm the scenario list before implementing.
 - C++: scenario-shaped GoogleTest names, e.g. `TEST(ResolveExeLink, WhenNoCaptcha_RecordsDestination)`.
+- Bug fixes start red: write a test that reproduces the bug, show it failing, then fix.
+- UI changes: end with a short manual test script (keys to press, expected result) and
+  say what wasn't verified in the running app. Green checks aren't proof a UI works.
+
+## Intent — don't block, don't assume
+
+- "Don't block on X" means proceed; note the risk once and never re-raise it.
+- An unanswered question is not agreement. Ask again, or design the best option yourself
+  if that's what was asked.
+- "Delete" means delete — not rename to `.bak`.
+- A UI request that references existing behavior ("like g-d"): restate your reading in one
+  sentence before changing layout.
+
+## Verification
+
+- Never pipe build/test output through `tail`/`head` without `set -o pipefail`; check exit codes.
+- Don't report measured numbers (sizes, counts, timings) without the command that produced them.
+- Network-critical changes (DHCP, DNS, sshd, firewall): state the fallback and rollback
+  command before applying.
 
 ## Every repo gets
 
@@ -65,6 +84,9 @@ body is structured Given / When / Then.
   Code", in commits or PR bodies. Commits are Dan's. (`attribution` in settings.json enforces it.)
 - **No `lefthook`, no `pre-commit`, no `prek`.** Correctness is enforced by `just check`
   and CI, not git hooks.
+- **Stage by path.** Never `git add -A`/`.`/`commit -a`; never commit files you didn't create
+  in this task (plan files, `*.db`, `.bak`). Check `git status` before committing.
+  (`claude-hook-guard-bash` enforces the first and `*.db`.)
 
 ## Project-specific
 
