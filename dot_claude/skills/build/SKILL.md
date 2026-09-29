@@ -13,6 +13,7 @@ If this session already refined or built the item, its spec and code are in your
 2. `update_item state="In Progress"`. Work in this worktree, on its branch, never on `main`.
 3. Read the repo's `AGENTS.md` and follow it.
    - Write the spec's behaviour tests first and watch them fail. Then implement until the repo's checks pass (`just check` if there is a justfile).
+   - If the spec has `## Slices`, build them in order, each one test-first and passing checks before the next, with at least one commit per slice. All slices go in one PR.
    - If the spec is wrong or something is unclear, ask (see **Asking Dan** in the refine skill). Don't widen the scope.
 4. Commit as Conventional Commits (`type(scope): what changed`), succinct, one commit per logical step. Never add a Claude trailer or any other attribution. Push with `git push -u origin HEAD`.
 5. Open the PR with `open_pr_for_item <ID>`, unless a PR is already open, in which case pushing is enough. Only if another open PR touches the same files, pass `title_prefix="[<group> n/m] "` to state the review order.
