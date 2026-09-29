@@ -28,7 +28,7 @@ payload="$(cat)"
 file="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
 [ -n "$file" ] || exit 0
 
-SOURCE_DIR="{{ .chezmoi.homeDir }}/Documents/dotfiles"
+SOURCE_DIR="{{ .chezmoi.homeDir }}/Desktop/projects/dotfiles"
 ALLOWLIST="$HOME/.config/claude-sync/backup-paths"
 
 # Never add from inside the chezmoi source dir itself.

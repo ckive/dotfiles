@@ -15,7 +15,7 @@ file="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // empty' 2>/dev/n
 case "$file" in
   "$HOME"/.config/kitty/kitty.conf)
     jq -n '{
-      systemMessage: "kitty.conf changed. Update ~/Documents/dotfiles/TERMINAL-SHORTCUTS.md to match, then chezmoi re-add the config (the cheatsheet itself has no $HOME target, so edit it directly in the dotfiles source dir)."
+      systemMessage: "kitty.conf changed. Update ~/Desktop/projects/dotfiles/TERMINAL-SHORTCUTS.md to match, then chezmoi re-add the config (the cheatsheet itself has no $HOME target, so edit it directly in the dotfiles source dir)."
     }'
     ;;
 esac

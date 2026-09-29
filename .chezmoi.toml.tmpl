@@ -5,13 +5,13 @@
   machine the config does not exist until init has already run. So the first
   invocation must pass --source explicitly:
 
-    chezmoi init --apply --source ~/Documents/dotfiles git@github.com:ckive/dotfiles.git
+    chezmoi init --apply --source ~/Desktop/projects/dotfiles git@github.com:ckive/dotfiles.git
 */ -}}
 {{- $role := promptStringOnce . "role" "role" "workstation" -}}
 {{- if not (has $role (list "workstation" "agent")) -}}
 {{-   fail (printf "role must be workstation or agent, got %q" $role) -}}
 {{- end }}
-sourceDir = {{ printf "%s/Documents/dotfiles" .chezmoi.homeDir | quote }}
+sourceDir = {{ printf "%s/Desktop/projects/dotfiles" .chezmoi.homeDir | quote }}
 
 # role decides only git flow and which role-gated hook scripts act:
 #   workstation — source tracks main; autoPush publishes directly.

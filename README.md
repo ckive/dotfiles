@@ -1,7 +1,7 @@
 # dotfiles
 
 Personal dotfiles managed with [chezmoi](https://www.chezmoi.io/). The source of truth is
-this repo, checked out at `~/Documents/dotfiles`.
+this repo, checked out at `~/Desktop/projects/dotfiles`.
 
 Primary purpose: keep **agentic coding configs** (Claude Code, Kimi Code, Codex) in sync
 across machines automatically. Adapted from
@@ -50,7 +50,7 @@ after `init` — so the non-default source path **must** be passed explicitly th
 
 ```bash
 brew install chezmoi flock jq
-chezmoi init --apply --source ~/Documents/dotfiles git@github.com:ckive/dotfiles.git
+chezmoi init --apply --source ~/Desktop/projects/dotfiles git@github.com:ckive/dotfiles.git
 ```
 
 Agent host (done by Ansible; needs `gh` authenticated with the dotfiles-scoped PAT and
@@ -58,7 +58,7 @@ Agent host (done by Ansible; needs `gh` authenticated with the dotfiles-scoped P
 
 ```bash
 chezmoi init --apply --promptString role=agent \
-  --source ~/Documents/dotfiles https://github.com/ckive/dotfiles.git
+  --source ~/Desktop/projects/dotfiles https://github.com/ckive/dotfiles.git
 ```
 
 Existing machine picking up the `role` var for the first time: `chezmoi init` (answer
