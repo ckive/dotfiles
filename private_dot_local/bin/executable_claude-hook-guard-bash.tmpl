@@ -38,6 +38,19 @@ printf '%s' "$cmd" | grep -qE 'git\s+clean\s+(-[a-zA-Z]*\s*)*-[a-zA-Z]*[fd]' \
 printf '%s' "$cmd" | grep -qE 'git\s+reset\s+--hard' \
   && block "git reset --hard (discards working tree)"
 
+# Bulk staging sweeps in files nobody meant to commit (a tracked state.db once lost data).
+printf '%s' "$cmd" | grep -qE 'git\s+add\s+([^;&|]*\s)?(-A|--all|\.)([[:space:];&|]|$)' \
+  && block "bulk git add (stage files explicitly by path)"
+printf '%s' "$cmd" | grep -qE 'git\s+commit\s+([^;&|]*\s)?(-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:];&|]|$)' \
+  && block "git commit -a (stage files explicitly by path)"
+printf '%s' "$cmd" | grep -qE 'git\s+add\s+[^;&|]*\.db([[:space:];&|]|$)' \
+  && block "staging a .db file (runtime state never gets committed)"
+if printf '%s' "$cmd" | grep -qE 'git\s+([^;&|]*\s)?commit'; then
+  cwd="$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)"
+  git -C "${cwd:-.}" diff --cached --name-only 2>/dev/null | grep -qE '\.db$' \
+    && block "a .db file is staged (git restore --staged it)"
+fi
+
 # Force-push, but allow the safe --force-with-lease variant.
 # (grep -E has no lookahead, so strip the safe form first, then test.)
 stripped="$(printf '%s' "$cmd" | sed 's/--force-with-lease[^ ]*//g')"
