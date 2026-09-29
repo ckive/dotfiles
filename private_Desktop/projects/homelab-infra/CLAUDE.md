@@ -32,7 +32,7 @@ SSH daemon changes on any host.
    guidance) or whether you'll do it programmatically (and explain what it does).
 
 ## After every change
-- Update Ansible/scripts and docs so the repo reflects reality.
+- Update Ansible/scripts and docs so the repo reflects reality, including the README diagram.
 - Small commit per successful step.
 
 ## Secrets
