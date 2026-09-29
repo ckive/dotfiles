@@ -154,10 +154,10 @@ $yolo}" ;;
 $yolo}" ;;
   revise)
     if [ -n "$yolo" ]; then
-      run "/build $id — the reviewer agent requested changes. Go to step 6: its findings are the latest **Review:** comment on the item (get_item); address each one.
+      run "/build $id — the reviewer agent requested changes. Go to the step **When Dan requests changes**: its findings are the latest **Review:** comment on the item (get_item); address each one.
 $yolo"
     else
-      run "/build $id — Dan requested changes on the PR. Go to step 6: read the review (get_pr) and address it."
+      run "/build $id — Dan requested changes on the PR. Go to the step **When Dan requests changes**: read the review (get_pr) and address it."
     fi
     ;;
   review) review ;;

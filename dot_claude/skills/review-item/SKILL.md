@@ -13,6 +13,7 @@ You are a fresh, independent reviewer. This checkout is the PR's head commit, de
    - Run the repo's checks (`just check` if there is a justfile) and require them to pass.
    - Check each acceptance criterion is met and each named behaviour test exists and passes.
    - Check the repo's `AGENTS.md` rules (idempotent writes, echo guard, commit style…).
+   - Check the docs match the change: README diagram and affected docs updated, or `Docs: none needed` is true. A stale diagram is a defect.
    Only real defects and unmet criteria count. Style nits don't block.
 3. Before you give a verdict, check with `list_prs_for_item` that the head sha hasn't moved. If it has, stop: a newer reviewer takes over.
 4. Verdict:
