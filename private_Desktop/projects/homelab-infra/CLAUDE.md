@@ -30,14 +30,9 @@ SSH daemon changes on any host.
    GPU ownership, or existing services.
 5. Tell the human whether they should do it via the UI (with step-by-step
    guidance) or whether you'll do it programmatically (and explain what it does).
-6. DHCP, DNS, sshd, firewall: name the fallback that keeps the household online
-   and the exact rollback command, before applying. Keep a second SSH session open
-   across any sshd reload.
 
 ## After every change
-- Verify on the host, with a fresh connection. `changed=0` when you expected a
-  change means it didn't happen — find out why.
-- Update Ansible/scripts and docs so the repo reflects reality, including the README diagram.
+- Update Ansible/scripts and docs so the repo reflects reality.
 - Small commit per successful step.
 
 ## Secrets
