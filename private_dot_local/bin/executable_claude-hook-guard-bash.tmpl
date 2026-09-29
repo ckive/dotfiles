@@ -39,11 +39,13 @@ printf '%s' "$cmd" | grep -qE 'git\s+reset\s+--hard' \
   && block "git reset --hard (discards working tree)"
 
 # Bulk staging sweeps in files nobody meant to commit (a tracked state.db once lost data).
-printf '%s' "$cmd" | grep -qE 'git\s+add\s+([^;&|]*\s)?(-A|--all|\.)([[:space:];&|]|$)' \
+# Quoted strings are dropped first so commit messages can't trip these.
+unq="$(printf '%s' "$cmd" | sed -E "s/\"[^\"]*\"//g; s/'[^']*'//g")"
+printf '%s' "$unq" | grep -qE 'git\s+add\s+([^;&|]*\s)?(-A|--all|\.)([[:space:];&|]|$)' \
   && block "bulk git add (stage files explicitly by path)"
-printf '%s' "$cmd" | grep -qE 'git\s+commit\s+([^;&|]*\s)?(-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:];&|]|$)' \
+printf '%s' "$unq" | grep -qE 'git\s+commit\s+([^;&|]*\s)?(-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:];&|]|$)' \
   && block "git commit -a (stage files explicitly by path)"
-printf '%s' "$cmd" | grep -qE 'git\s+add\s+[^;&|]*\.db([[:space:];&|]|$)' \
+printf '%s' "$unq" | grep -qE 'git\s+add\s+[^;&|]*\.db([[:space:];&|]|$)' \
   && block "staging a .db file (runtime state never gets committed)"
 if printf '%s' "$cmd" | grep -qE 'git\s+([^;&|]*\s)?commit'; then
   cwd="$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)"
