@@ -68,5 +68,5 @@ body is structured Given / When / Then.
 
 ## Project-specific
 
-- `~/Desktop/cc/wins-ingestion` is deliberately **not** a git repo. Don't `git init` it,
+- `~/Desktop/projects/winner/wins-ingestion` is deliberately **not** a git repo. Don't `git init` it,
   don't offer to commit, don't propose CI or commit conventions there.
