@@ -8,7 +8,7 @@ description: Implement a refined Plane work item and open a PR for Dan's review.
 If this session already refined or built the item, its spec and code are in your context: don't redo that work. Re-read only what `get_item` shows has changed (Dan may have edited the spec in Plane), and skip files and reading you've already done.
 
 1. `get_item <ID>`.
-   - If the description has no `## Acceptance criteria`, follow the **refine** skill instead, then `update_item remove_labels=["agent-build"]` and stop.
+   - If the description has no `## Acceptance criteria`, Dan's notes are the brief: write the spec yourself and keep going. Follow the **refine** skill's steps 2 and 4–6 (investigate, ask only a product decision the notes leave open, check collisions, write the spec keeping **Original notes**); skip its triage and closing steps. `comment_item "Spec written from your notes; building now."` and continue. Don't remove `agent-build` or wait for approval.
    - If Context says `Overlaps <X>` and X is not Done, `update_item add_labels=["blocked"]`, comment which item it waits for, and stop.
 2. `update_item state="In Progress"`. Work in this worktree, on its branch, never on `main`.
 3. Read the repo's `AGENTS.md` and follow it.

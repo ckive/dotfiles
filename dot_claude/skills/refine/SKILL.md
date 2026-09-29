@@ -1,6 +1,6 @@
 ---
 name: refine
-description: Turn a Plane work item into the standard spec before any build, planning larger asks first. Use for "/refine <ITEM-ID>", and when /build finds an item without a spec. Never writes code or opens a PR.
+description: Turn a Plane work item into the standard spec and stop for Dan's approval, planning larger asks first. Use for "/refine <ITEM-ID>"; /build also follows its spec steps when an item has none. Never writes code or opens a PR.
 ---
 
 # Refine a work item
