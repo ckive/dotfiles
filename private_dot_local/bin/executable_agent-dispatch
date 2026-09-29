@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# agent-dispatch <refine|build|review|revise|comment|stop|done|prune> <ITEM-ID|all> [yolo]
+# agent-dispatch <refine|build|review|revise|rebase|comment|stop|done|prune> <ITEM-ID|all> [yolo]
 #
 # Called by pfi (rule action notify.exec) with the event JSON on stdin; see
 # docs/plans/agent-workflow.md. One worktree and one tmux session per item, both named after it.
 # The session runs interactive `claude`, so Remote Control shows it and Dan can attach
 # (`tmux attach -t WINSVIEWER-12`). A running session gets new instructions pasted in, so a
 # build continues with its refine context. Returns at once; the work happens in tmux.
+# `rebase` (the item's blocker merged) asks its session to rebase a stacked branch onto main.
 # `done` (PR merged) only marks the item: its session stays for follow-up steps after merge.
 # `prune <ID|all>` (run by hand) ends marked items' sessions and removes their worktree and local
 # branch if nothing is left uncommitted; Claude's transcripts in ~/.claude/projects are kept.
@@ -159,6 +160,12 @@ $yolo"
     else
       run "/build $id — Dan requested changes on the PR. Go to step 6: read the review (get_pr) and address it."
     fi
+    ;;
+  rebase)
+    blocker=$(jq -r '.event.context.blocker.identifier // "Your blocker"' <<<"$payload")
+    tip=$(jq -r '.event.context.blocker.pr.sha // empty' <<<"$payload")
+    run "/build $id — $blocker merged; rebase${tip:+ (its old tip is $tip)}. See **Blocked by another item**.${yolo:+
+$yolo}"
     ;;
   review) review ;;
   comment)
