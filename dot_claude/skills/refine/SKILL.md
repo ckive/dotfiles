@@ -11,6 +11,7 @@ Aim: a spec a build agent can follow without guessing: one screen for a small as
 2. Investigate in this worktree without committing:
    - Find the code involved.
    - For a bug, reproduce it. A failing test is the best repro. Record the cause as `file:line`.
+   - Pick the repo. If the project links several (`project_info`) and the description makes clear the work belongs in one that isn't the first, `update_item add_labels=["repo:<name>"]` (repo name without owner) and investigate there. If it's unclear, leave it: pfi uses the first repo.
 3. Triage the item, then `comment_item` your verdict and a one-line reason (`**Track: spec**, one module, one decision`) before anything else:
    - **spec**: one area, few product decisions, fits on one screen. Follow the steps as written.
    - **plan**: several modules or repos, a new component or service, several product decisions, or it won't fit on one screen. Follow **Plan track** as well.
