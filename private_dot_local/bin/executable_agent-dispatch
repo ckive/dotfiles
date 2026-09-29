@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agent-dispatch <refine|build|review|revise|comment|stop|done|prune> <ITEM-ID|all> [yolo]
+# agent-dispatch <refine|build|review|revise|conflict|comment|stop|done|prune> <ITEM-ID|all> [yolo]
 #
 # Called by pfi (rule action notify.exec) with the event JSON on stdin; see
 # docs/plans/agent-workflow.md. One worktree and one tmux session per item, both named after it.
@@ -11,6 +11,8 @@
 # branch if nothing is left uncommitted; Claude's transcripts in ~/.claude/projects are kept.
 # `review` (yolo mode) starts a fresh reviewer session, "<ID>-review", on a detached checkout of
 # the PR's head; a newer push replaces it. A trailing `yolo` tells the agent to run hands-free.
+# `conflict` (pfi's forgejo.pr.conflicted) has the item's agent merge the PR's base in and push;
+# like `comment`, it only reaches items an agent has worked on.
 set -euo pipefail
 
 job=${1:?job} id=${2:?item id} mode=${3:-}
@@ -161,6 +163,13 @@ $yolo"
     fi
     ;;
   review) review ;;
+  conflict)
+    [ -d "$work/wt/$id" ] || { log "no agent has worked on this item; conflict ignored"; exit 0; }
+    pr=$(jq -r '.event.context.pr.number // empty' <<<"$payload")
+    base=$(jq -r '.event.context.pr.base // "main"' <<<"$payload")
+    run "$id: PR #$pr now conflicts with $base. Resolve it without waiting for Dan: \`git fetch origin && git merge origin/$base\`, resolve each conflict keeping the intent of both sides, run the repo's checks (\`just check\`), commit the merge and push without force. If the merge is clean, the conflict is already gone: say so with comment_item and stop. Otherwise comment_item one line on what conflicted and how you resolved it. Change nothing else.${yolo:+
+$yolo}"
+    ;;
   comment)
     if has_session; then
       say "$adjust"
