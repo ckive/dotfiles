@@ -21,7 +21,7 @@ payload="$(cat)"
 file="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
 [ -n "$file" ] || exit 0
 
-SOURCE_DIR="{{ .chezmoi.homeDir }}/Desktop/projects/dotfiles"
+SOURCE_DIR={{ .chezmoi.sourceDir | quote }}
 
 # ---- 2. Secret pre-flight (block) ----
 content="$(printf '%s' "$payload" | jq -r '

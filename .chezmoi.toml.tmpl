@@ -11,7 +11,7 @@
 {{- if not (has $role (list "workstation" "agent")) -}}
 {{-   fail (printf "role must be workstation or agent, got %q" $role) -}}
 {{- end }}
-sourceDir = {{ printf "%s/Desktop/projects/dotfiles" .chezmoi.homeDir | quote }}
+sourceDir = {{ .chezmoi.sourceDir | quote }}
 
 # role decides only git flow and which role-gated hook scripts act:
 #   workstation — source tracks main; autoPush publishes directly.

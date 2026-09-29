@@ -85,7 +85,7 @@ claude() {
   fi
 }
 
-# Dotfiles are managed by chezmoi (source: ~/Desktop/projects/dotfiles).
+# Dotfiles are managed by chezmoi (source dir: `chezmoi source-path`).
 #   chezmoi cd       jump to the source dir
 #   chezmoi edit <f> edit a managed file
 #   chezmoi apply    push source -> home
