@@ -11,6 +11,8 @@
 # branch if nothing is left uncommitted; Claude's transcripts in ~/.claude/projects are kept.
 # `review` (yolo mode) starts a fresh reviewer session, "<ID>-review", on a detached checkout of
 # the PR's head; a newer push replaces it. A trailing `yolo` tells the agent to run hands-free.
+# A comment that starts with a slash command (`/goal …`, `/compact`) is pasted as typed, so Claude
+# Code runs it natively. A `/goal` line in the description is set just before `/build`.
 set -euo pipefail
 
 job=${1:?job} id=${2:?item id} mode=${3:-}
@@ -76,6 +78,29 @@ worktree() {
   printf '%s' "$wt"
 }
 
+# Once the new session $sess shows its prompt, paste <text>. In the background: pfi waits for us.
+say_when_ready() {
+  (
+    for _ in $(seq 600); do
+      tmux capture-pane -p -t "=$sess:" 2>/dev/null | grep -q '^❯' && { say "$1"; exit; }
+      sleep "${AGENT_READY_POLL:-1}"
+    done
+    log "session never became ready; not sent: $1"
+  ) </dev/null >/dev/null 2>&1 &
+}
+
+# The slash command a comment starts with, as typed, or nothing. Slack replies arrive as
+# "<author> (slack): <text>" (pfi connectors/hub.py `_plane_comment`); Slack only posts a message
+# that starts with "/" behind a space or backticks. All of that is stripped.
+command_in() {
+  local t=$1 nl=$'\n'
+  t="${t#"${t%%[![:space:]]*}"}"
+  [[ $t =~ ^[^:$nl]{1,80}\ \(slack\):[[:space:]]*(.*)$ ]] && t=${BASH_REMATCH[1]}
+  t="${t%"${t##*[![:space:]]}"}"
+  [[ $t =~ ^\`(/[^\`]*)\`$ ]] && t=${BASH_REMATCH[1]}
+  [[ $t != /* ]] || printf '%s' "$t"
+}
+
 run() {
   if has_session; then
     say "$1"
@@ -139,6 +164,9 @@ remove_worktree() {
 }
 
 comment=$(jq -r '.event.context.comment.text // empty' <<<"$payload")
+command=$(command_in "$comment")
+# The item description's first `/goal` line; pfi sends the description as text.
+goal=$(jq -r '.items[0].description // empty' <<<"$payload" | sed -nE 's/^[[:space:]]*(\/goal[[:space:]].*[^[:space:]])[[:space:]]*$/\1/p' | head -n1)
 # Dan's comment answers an open question or adjusts the work; either way the agent carries on
 # where it is. Re-adding agent-refine is the only way to restart from scratch.
 adjust="Dan commented on Plane: $comment
@@ -150,8 +178,20 @@ case $job in refine | build | revise) rm -f "$done_dir/$id" ;; esac
 case $job in
   refine) run "/refine $id${yolo:+
 $yolo}" ;;
-  build) run "/build $id${yolo:+
-$yolo}" ;;
+  build)
+    prompt="/build $id${yolo:+
+$yolo}"
+    if [ -z "$goal" ]; then
+      run "$prompt"
+    elif has_session; then
+      say "$goal"
+      say "$prompt"
+      log "goal and build sent to the running session"
+    else
+      start "$(worktree)" "$prompt"
+      say_when_ready "$goal"
+    fi
+    ;;
   revise)
     if [ -n "$yolo" ]; then
       run "/build $id — the reviewer agent requested changes. Go to step 6: its findings are the latest **Review:** comment on the item (get_item); address each one.
@@ -162,7 +202,13 @@ $yolo"
     ;;
   review) review ;;
   comment)
-    if has_session; then
+    if [ -n "$command" ] && has_session; then
+      say "$command"
+      log "command delivered"
+    elif [ -n "$command" ] && [ -d "$work/wt/$id" ]; then
+      start "$(worktree)" "Resume $id (check its state with get_item)."
+      say_when_ready "$command"
+    elif has_session; then
       say "$adjust"
       log "comment delivered"
     elif [ -d "$work/wt/$id" ]; then

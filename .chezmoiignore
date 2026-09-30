@@ -2,10 +2,11 @@
 # This is the safety net for the PostToolUse auto-add hook: anything matched here
 # will never be tracked, even if a hook tries to add it.
 
-# Repo docs live in the source dir only — never apply them into $HOME.
+# Repo docs and tests live in the source dir only — never apply them into $HOME.
 README.md
 LICENSE
 TERMINAL-SHORTCUTS.md
+tests/**
 
 .DS_Store
 **/.DS_Store
