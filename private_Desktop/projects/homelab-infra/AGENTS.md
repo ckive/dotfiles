@@ -23,6 +23,8 @@ list, secrets, guardrails), except "Where and as whom you run": you are **not** 
 3. `just setup && just check` must pass (it's also the `check` CI on Forgejo).
 4. PR `[<ID>] <summary>`. The body says **what to deploy** (e.g. `just deploy svc01 stacks`), what
    restarts, the risk, and how to verify it. Anything needing host root: exact commands for Dan.
+5. Docs in the same PR: the README diagram and affected docs. If none apply, write `Docs: none needed`
+   in the PR body; the `check / docs` CI fails otherwise.
 
 ## Deploy
 After merge, svc01 redeploys changed `docker/svc01/<stack>/` for caddy, dockhand, homepage and plane

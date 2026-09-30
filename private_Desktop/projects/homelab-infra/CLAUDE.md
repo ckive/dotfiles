@@ -37,7 +37,7 @@ SSH daemon changes on any host.
 ## After every change
 - Verify on the host, with a fresh connection. `changed=0` when you expected a
   change means it didn't happen — find out why.
-- Update Ansible/scripts and docs so the repo reflects reality.
+- Update Ansible/scripts and docs so the repo reflects reality, including the README diagram.
 - Small commit per successful step.
 
 ## Secrets
