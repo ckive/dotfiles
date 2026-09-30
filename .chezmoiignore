@@ -38,6 +38,8 @@ TERMINAL-SHORTCUTS.md
 .claude/statsig/**
 .claude/tasks/**
 .claude/todos/**
+.claude/usage-data/**
+.claude/.oauth_refresh.lock*
 
 # ---- Kimi Code ----
 .kimi-code/bin/**

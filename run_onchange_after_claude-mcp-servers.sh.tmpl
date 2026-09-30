@@ -1,0 +1,24 @@
+#!/bin/bash
+# Merge synced user-scope MCP servers into ~/.claude.json (see claude-sync-sweep).
+# Reruns whenever mcp-servers.json changes:
+# {{ include "private_dot_config/claude-sync/private_mcp-servers.json" | sha256sum }}
+#
+# The synced file wins for servers it lists; servers only this machine has are kept
+# (the next sweep exports them). Every other key in ~/.claude.json is untouched.
+
+set -uo pipefail
+
+command -v jq >/dev/null 2>&1 || exit 0
+
+src="$HOME/.config/claude-sync/mcp-servers.json"
+dst="$HOME/.claude.json"
+
+[ -f "$src" ] || exit 0
+[ "$(jq -c . "$src")" = "{}" ] && exit 0
+[ -f "$dst" ] || { echo '{}' >"$dst"; chmod 600 "$dst"; }
+
+merged="$(jq --slurpfile s "$src" '.mcpServers = ((.mcpServers // {}) + $s[0])' "$dst")" || exit 0
+[ "$(jq -c . <<<"$merged")" = "$(jq -c . "$dst")" ] && exit 0
+
+tmp="$(mktemp "$dst.XXXXXX")" && printf '%s\n' "$merged" >"$tmp" \
+  && chmod 600 "$tmp" && mv "$tmp" "$dst"

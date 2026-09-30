@@ -15,7 +15,20 @@ across machines automatically. Adapted from
 |---|---|
 | Push | chezmoi `autoCommit` + `autoPush` — every `chezmoi add` commits and pushes |
 | Pull | `SessionStart` hook runs `~/.local/bin/chezmoi-session-sync` (chezmoi has **no** native autoPull) |
-| Capture | `PostToolUse` hook auto-adds any edited `.claude/` file; `Stop` hook runs `chezmoi re-add` |
+| Capture | `PostToolUse` hook auto-adds any edited `.claude/` file; `Stop` hook and session sync (before pulling) run `claude-sync-sweep` |
+
+`claude-sync-sweep` catches what Claude's Edit/Write never touches:
+
+| Add-on | Lives in | Synced as |
+|---|---|---|
+| Skills, agents, commands, rules, output styles, hooks | `~/.claude/<dir>/` | new files `chezmoi add`ed, changed ones re-added |
+| Plugins | `enabledPlugins` in `settings.json` | re-added; plugin code (`~/.claude/plugins/`) re-downloads per machine |
+| Marketplaces (`/plugin marketplace add`) | `~/.claude/plugins/known_marketplaces.json` (ignored) | copied into `extraKnownMarketplaces` in `settings.json` |
+| User MCP servers (`claude mcp add -s user`) | `mcpServers` in `~/.claude.json` (untrackable) | copied to `~/.config/claude-sync/mcp-servers.json`; `run_onchange_after_claude-mcp-servers.sh` merges it back on apply |
+
+Marketplace and MCP syncing is **add-only**: to remove one everywhere, delete it from
+`settings.json` / `mcp-servers.json` by hand. MCP servers with literal `env`/`headers`
+values are skipped (likely tokens); use `"${VAR}"` references to make them syncable.
 
 ## Machine roles
 

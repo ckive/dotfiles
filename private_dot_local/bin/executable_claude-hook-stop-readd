@@ -1,5 +1,6 @@
 #!/bin/bash
-# Stop: catch anything the PostToolUse hook missed.
+# Stop: catch anything the PostToolUse hook missed — changes to tracked files, new
+# add-on files, /plugin marketplaces, user MCP servers. See claude-sync-sweep.
 # Fails open; never blocks.
 
 set -uo pipefail
@@ -7,12 +8,13 @@ set -uo pipefail
 command -v chezmoi >/dev/null 2>&1 || exit 0
 
 lock="$HOME/.claude-backup.lock"
+sweep="$HOME/.local/bin/claude-sync-sweep"
 
 if command -v flock >/dev/null 2>&1; then
-  flock -w 5 "$lock" chezmoi re-add >/dev/null 2>&1 &
+  flock -w 5 "$lock" "$sweep" >/dev/null 2>&1 &
 else
   echo "[chezmoi-readd] flock not found; run: brew install flock" >&2
-  chezmoi re-add >/dev/null 2>&1 &
+  "$sweep" >/dev/null 2>&1 &
 fi
 
 exit 0

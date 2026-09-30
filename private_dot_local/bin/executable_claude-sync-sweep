@@ -1,0 +1,99 @@
+#!/bin/bash
+# Capture Claude add-ons that the PostToolUse (Edit|Write) hook never sees:
+#
+#   1. New files under the ~/.claude add-on dirs (skills, agents, ...) created by
+#      cp, installers, or by hand -> chezmoi add. `chezmoi re-add` alone only
+#      refreshes files that are already tracked.
+#   2. Marketplaces added via `/plugin marketplace add`, which Claude records only in
+#      the ignored plugins/known_marketplaces.json -> settings.json extraKnownMarketplaces.
+#   3. User-scope MCP servers (`claude mcp add -s user`), which live in ~/.claude.json
+#      (untrackable: it also holds OAuth, IDs, usage) -> ~/.config/claude-sync/mcp-servers.json.
+#      run_onchange_after_claude-mcp-servers.sh merges that file back on other machines.
+#   4. Everything already tracked -> chezmoi re-add.
+#
+# Merges are add-only. Removing a marketplace or MCP server everywhere means deleting
+# it from settings.json / mcp-servers.json by hand; otherwise a fresh machine with
+# nothing installed would wipe the lists. Existing entries are never overwritten.
+#
+# Called by the Stop hook and by chezmoi-session-sync before it pulls. Callers hold
+# ~/.claude-backup.lock. Fails open; never blocks.
+
+set -uo pipefail
+
+command -v chezmoi >/dev/null 2>&1 || exit 0
+command -v jq >/dev/null 2>&1 || exit 0
+
+CLAUDE_DIR="$HOME/.claude"
+SETTINGS="$CLAUDE_DIR/settings.json"
+KNOWN="$CLAUDE_DIR/plugins/known_marketplaces.json"
+CLAUDE_JSON="$HOME/.claude.json"
+MCP="$HOME/.config/claude-sync/mcp-servers.json"
+ADDON_DIRS=(skills agents commands rules output-styles hooks)
+ADDON_FILES=(keybindings.json)
+
+# Replace $1 with stdin atomically, keeping its mode.
+replace() {
+  local tmp
+  tmp="$(mktemp "$1.XXXXXX")" || return 1
+  cat >"$tmp" && chmod "$(stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1")" "$tmp" \
+    && mv "$tmp" "$1" || { rm -f "$tmp"; return 1; }
+}
+
+to_add=()
+
+# ---- 1. New add-on files ----
+for d in "${ADDON_DIRS[@]}"; do
+  [ -d "$CLAUDE_DIR/$d" ] || continue
+  while IFS= read -r p; do
+    [ -n "$p" ] && to_add+=("$p")
+  done < <(chezmoi unmanaged --path-style absolute "$CLAUDE_DIR/$d" 2>/dev/null)
+done
+for f in "${ADDON_FILES[@]}"; do
+  [ -f "$CLAUDE_DIR/$f" ] || continue
+  chezmoi managed "$CLAUDE_DIR/$f" 2>/dev/null | grep -q . || to_add+=("$CLAUDE_DIR/$f")
+done
+
+# ---- 2. Marketplaces -> settings.json ----
+# Only portable sources; the official marketplace is auto-installed everywhere.
+if [ -f "$KNOWN" ] && [ -f "$SETTINGS" ]; then
+  missing="$(jq -c --slurpfile s "$SETTINGS" '
+    with_entries(select(.key != "claude-plugins-official"
+                        and (.value.source.source | IN("github", "git", "url"))))
+    | map_values({source})
+    | with_entries(select(.key | IN(($s[0].extraKnownMarketplaces // {}) | keys[]) | not))
+  ' "$KNOWN" 2>/dev/null)"
+  if [ -n "$missing" ] && [ "$missing" != "{}" ]; then
+    jq --argjson m "$missing" '.extraKnownMarketplaces = ($m + (.extraKnownMarketplaces // {}))' \
+      "$SETTINGS" | replace "$SETTINGS" \
+      || echo "[claude-sync] could not update extraKnownMarketplaces" >&2
+  fi
+fi
+
+# ---- 3. User-scope MCP servers -> mcp-servers.json ----
+# Servers with literal env/header values are skipped: they usually hold tokens and
+# this repo auto-pushes. Use "${VAR}" references to make a server syncable.
+if [ -f "$CLAUDE_JSON" ]; then
+  servers="$(jq -c '.mcpServers // {}' "$CLAUDE_JSON" 2>/dev/null)"
+  if [ -n "$servers" ] && [ "$servers" != "{}" ]; then
+    safe='with_entries(select([(.value.env // {}), (.value.headers // {})
+                               | .[] | tostring | startswith("${") | not] | any | not))'
+    skipped="$(jq -r "keys - ($safe | keys) | join(\", \")" <<<"$servers")"
+    [ -n "$skipped" ] && echo "[claude-sync] not syncing MCP servers with literal env/headers: $skipped" >&2
+    mkdir -p "$(dirname "$MCP")"
+    [ -f "$MCP" ] || { echo '{}' >"$MCP"; chmod 600 "$MCP"; }
+    merged="$(jq -c --argjson local "$servers" "(\$local | $safe) + ." "$MCP" 2>/dev/null)"
+    if [ -n "$merged" ] && [ "$merged" != "$(jq -c . "$MCP")" ]; then
+      jq . <<<"$merged" | replace "$MCP" || echo "[claude-sync] could not update $MCP" >&2
+    fi
+    chezmoi managed "$MCP" 2>/dev/null | grep -q . || to_add+=("$MCP")
+  fi
+fi
+
+# ---- 4. Track: one add (one commit) for new files, one re-add for changes ----
+if [ "${#to_add[@]}" -gt 0 ]; then
+  chezmoi add "${to_add[@]}" >/dev/null 2>&1 \
+    || echo "[claude-sync] chezmoi add failed (secret detected?): ${to_add[*]}" >&2
+fi
+chezmoi re-add >/dev/null 2>&1 || echo "[claude-sync] chezmoi re-add failed" >&2
+
+exit 0

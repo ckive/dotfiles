@@ -6,12 +6,23 @@ command -v chezmoi >/dev/null 2>&1 || exit 0
 
 ROLE="{{ get . "role" | default "workstation" }}"
 
+# Commit local changes made outside Claude's Edit/Write (/plugin, installers, hand
+# edits) BEFORE pulling; `update --force` would otherwise overwrite them.
+sweep() {
+  if command -v flock >/dev/null 2>&1; then
+    flock -w 10 "$HOME/.claude-backup.lock" "$HOME/.local/bin/claude-sync-sweep"
+  else
+    "$HOME/.local/bin/claude-sync-sweep"
+  fi
+}
+
 # Agent hosts: the source tracks agent/<host>. Rebase it onto main so Dan's merged
 # changes arrive and the open PR stays current. Never blocks an unattended session:
 # on conflict, abort and keep running on the last good config.
 if [ "$ROLE" = "agent" ]; then
   branch="agent/$(hostname -s)"
   chezmoi git -- rebase --abort >/dev/null 2>&1 || true
+  sweep
   chezmoi git -- fetch --quiet origin 2>/dev/null \
     || { echo "[chezmoi-sync] fetch failed (network?), skipping" >&2; exit 0; }
   chezmoi git -- checkout --quiet -B "$branch" 2>/dev/null
@@ -33,8 +44,15 @@ if chezmoi git -- status 2>&1 | grep -q "rebase in progress"; then
   exit 1
 fi
 
+sweep
+
 output=$(chezmoi update --force 2>&1)
-[ $? -eq 0 ] && exit 0
+if [ $? -eq 0 ]; then
+  # The sweep's autoPush is rejected when origin is ahead; update has now rebased
+  # those commits onto origin, so publish them.
+  chezmoi git -- push --quiet >/dev/null 2>&1 || true
+  exit 0
+fi
 
 # Missing upstream tracking. Must be matched BEFORE the conflict test below,
 # because git's error text for this case contains the word "rebase" and would
