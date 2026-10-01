@@ -4,3 +4,7 @@
 
 # chezmoi runtime state (never belongs in the repo)
 chezmoistate.boltdb
+
+# Python test caches
+__pycache__/
+.pytest_cache/
