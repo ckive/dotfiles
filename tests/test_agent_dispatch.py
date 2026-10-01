@@ -1,108 +1,9 @@
 """agent-dispatch delivers Dan's slash commands to an item's Claude Code session as typed.
 
-Run: uv run --with pytest pytest tests
-The script runs for real; `tmux` and `git` are stubs on PATH. The tmux stub records what the
-session would receive: `paste <text>` for each pasted message and `start <prompt>` for a new one.
+Run: uv run --with pytest pytest tests (harness: conftest.py).
 """
 
-import json
-import os
-import subprocess
-import time
-from pathlib import Path
-
-import pytest
-
-SCRIPT = Path(__file__).parents[1] / "private_dot_local/bin/executable_agent-dispatch"
-ID = "HL-99"
-
-TMUX = r"""#!/usr/bin/env bash
-# Records what a session receives. A session exists while $STUB/session exists.
-log=$STUB/tmux.log
-case $1 in
-  has-session) [ -e "$STUB/session" ] ;;
-  new-session) # the last arg is the shell command; its last word is claude's prompt
-    touch "$STUB/session"; eval "set -- ${@: -1}"; printf 'start %s\n' "${@: -1}" >>"$log" ;;
-  capture-pane) [ -e "$STUB/session" ] && printf '\n❯ \n' ;;
-  set-buffer) printf '%s' "${@: -1}" >"$STUB/buffer" ;;
-  paste-buffer) printf 'paste %s\n' "$(cat "$STUB/buffer")" >>"$log" ;;
-  send-keys) : ;;
-  kill-session) rm -f "$STUB/session" ;;
-esac
-"""
-
-GIT = """#!/usr/bin/env bash
-exit 0
-"""
-
-
-class Dispatch:
-    def __init__(self, tmp: Path) -> None:
-        self.work = tmp / "work"
-        self.stub = tmp / "stub"
-        (self.stub / "bin").mkdir(parents=True)
-        for name, body in {"tmux": TMUX, "git": GIT}.items():
-            path = self.stub / "bin" / name
-            path.write_text(body)
-            path.chmod(0o755)
-        (self.work / "homelab__repo" / ".git").mkdir(parents=True)
-        self.env = os.environ | {
-            "PATH": f"{self.stub / 'bin'}:{os.environ['PATH']}",
-            "HOME": str(tmp),
-            "STUB": str(self.stub),
-            "AGENT_WORK_DIR": str(self.work),
-            "AGENT_READY_POLL": "0.1",
-        }
-
-    def session_running(self) -> None:
-        (self.stub / "session").touch()
-        self.worked_on()
-
-    def worked_on(self) -> None:
-        (self.work / "wt" / ID).mkdir(parents=True, exist_ok=True)
-
-    def run(self, job: str, *, comment: str = "", description: str = "") -> str:
-        payload = {
-            "event": {"repo": "homelab/repo", "context": {"comment": {"text": comment}}},
-            "items": [{"name": "An item", "description": description}],
-        }
-        out = subprocess.run(
-            ["bash", str(SCRIPT), job, ID],
-            input=json.dumps(payload),
-            env=self.env,
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=30,
-        )
-        return out.stdout
-
-    def received(self, expect: int = 0) -> list[str]:
-        """Each message the session got, in order; waits for `expect` of them (background pastes)."""
-        log = self.stub / "tmux.log"
-        deadline = time.monotonic() + 10
-        while True:
-            text = log.read_text() if log.exists() else ""
-            msgs = [m for m in text.split("\n") if m.startswith(("paste ", "start "))]
-            if len(msgs) >= expect or time.monotonic() > deadline:
-                return _messages(text)
-            time.sleep(0.1)
-
-
-def _messages(text: str) -> list[str]:
-    """Split the log into messages; a multi-line paste continues until the next record."""
-    out: list[str] = []
-    for line in text.splitlines():
-        if line.startswith(("paste ", "start ")):
-            out.append(line)
-        elif out:
-            out[-1] += "\n" + line
-    return out
-
-
-@pytest.fixture
-def dispatch(tmp_path: Path) -> Dispatch:
-    return Dispatch(tmp_path)
+from conftest import ID, Dispatch
 
 
 def test_comment_starting_with_slash_is_pasted_verbatim(dispatch: Dispatch) -> None:
@@ -157,7 +58,7 @@ def test_command_reaches_session_that_was_not_running_after_resume(dispatch: Dis
 def test_command_for_item_without_agent_is_ignored(dispatch: Dispatch) -> None:
     # Given an item no agent has worked on
     # When Dan comments a slash command
-    out = dispatch.run("comment", comment="/goal anything")
+    out = dispatch.run("comment", comment="/goal anything").stdout
     # Then nothing reaches a session
     assert dispatch.received() == []
     assert "comment ignored" in out
