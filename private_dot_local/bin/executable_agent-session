@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# agent-session <session> <ITEM-ID> [claude args…] <prompt>
+#
+# What agent-dispatch runs in an item's tmux window: `claude <args> <prompt>`, kept alive. If
+# claude is killed (OOM) or exits non-zero, it is relaunched with --continue in the same window
+# and worktree, and told to say so on the item. At most 3 restarts an hour; then the pane stays
+# open with "restart limit reached". A clean exit (/exit) ends the session for good: its live
+# marker goes, so `agent-dispatch resume all` won't bring it back after a boot.
+set -uo pipefail
+
+sess=${1:?session} id=${2:?item id}
+shift 2
+prompt=${!#}
+set -- "${@:1:$#-1}"
+work=${AGENT_WORK_DIR:-/srv/work}
+max=${AGENT_RESTART_MAX:-3} window=${AGENT_RESTART_WINDOW:-3600}
+
+log() { printf '%s %s session: %s\n' "$(date -Is)" "$sess" "$*" >>"$work/dispatch.log"; echo "$*"; }
+
+restarts=() resume=()
+while :; do
+  claude "$@" "${resume[@]}" "$prompt"
+  status=$?
+  if [ "$status" -eq 0 ]; then
+    rm -f "$work/live/$sess"
+    exit 0
+  fi
+  if [ "$status" -gt 128 ]; then
+    why="killed by signal $((status - 128)) (SIG$(kill -l $((status - 128))))"
+  else
+    why="exited with status $status"
+  fi
+
+  now=$(date +%s) recent=()
+  for t in "${restarts[@]}"; do ((now - t < window)) && recent+=("$t"); done
+  restarts=("${recent[@]}")
+  if [ "${#restarts[@]}" -ge "$max" ]; then
+    log "claude $why; restart limit reached ($max in $((window / 60)) min), not restarting"
+    tmux set-option -p remain-on-exit on 2>/dev/null
+    exit 1
+  fi
+  restarts+=("$now")
+
+  log "claude $why; restarting with --continue"
+  sleep "${AGENT_RESTART_DELAY:-2}"
+  resume=(--continue)
+  prompt="You were restarted: claude $why. Post one comment_item on $id saying so, with that reason, then carry on where you left off."
+done

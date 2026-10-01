@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agent-dispatch <refine|build|review|revise|comment|stop|done|prune> <ITEM-ID|all> [yolo]
+# agent-dispatch <refine|build|review|revise|comment|stop|done|prune|resume> <ITEM-ID|all> [yolo]
 #
 # Called by pfi (rule action notify.exec) with the event JSON on stdin; see
 # docs/plans/agent-workflow.md. One worktree and one tmux session per item, both named after it.
@@ -11,10 +11,17 @@
 # branch if nothing is left uncommitted; Claude's transcripts in ~/.claude/projects are kept.
 # `review` (yolo mode) starts a fresh reviewer session, "<ID>-review", on a detached checkout of
 # the PR's head; a newer push replaces it. A trailing `yolo` tells the agent to run hands-free.
+# A comment that starts with a slash command (`/goal …`, `/compact`) is pasted as typed, so Claude
+# Code runs it natively. A `/goal` line in the description is set just before `/build`.
+# Sessions live on agent-sessions.service's tmux server (HL-31); this never starts a server, so
+# none ends up in pfi's cgroup. claude runs under agent-session, which relaunches it with
+# --continue if it is killed. Each started session is marked live in $work/live until it is
+# stopped, pruned or exits cleanly; `resume all` (run by agent-sessions.service at boot) brings
+# the marked ones back with --continue. `resume <ID>` does the same for one session, by hand.
 set -euo pipefail
 
 job=${1:?job} id=${2:?item id} mode=${3:-}
-payload=$(cat)
+payload=$([ -t 0 ] || cat) # by hand (resume, prune) there is no event
 work=${AGENT_WORK_DIR:-/srv/work}
 forge=${AGENT_FORGE_URL:-https://git.home.arpa}
 done_dir="$work/done"
@@ -22,7 +29,22 @@ mkdir -p "$work/wt" "$done_dir"
 
 log() { printf '%s %s %s: %s\n' "$(date -Is)" "$id" "$job" "$*" >>"$work/dispatch.log"; echo "$*"; }
 sess=$id # the tmux session the helpers act on
-has_session() { tmux has-session -t "=$sess" 2>/dev/null; }
+live="$work/live"
+# Running, not just kept open after agent-session gave up (remain-on-exit).
+has_session() {
+  tmux has-session -t "=$sess" 2>/dev/null &&
+    [ "$(tmux display-message -p -t "=$sess:" '#{pane_dead}' 2>/dev/null)" != 1 ]
+}
+
+# The tmux server must be agent-sessions.service's. If it isn't up, `tmux new-session` would start
+# one here, in pfi's cgroup, where an OOM kill or pfi restart takes every session with it.
+require_server() {
+  local unit=agent-sessions.service pid
+  pid=$(tmux display-message -p '#{pid}' 2>/dev/null) &&
+    grep -q "/$unit\$" "${AGENT_PROC:-/proc}/$pid/cgroup" 2>/dev/null && return 0
+  log "no tmux server under $unit; not starting one (docs/runbooks/dev01.md)" >&2
+  exit 1
+}
 
 # Bracketed paste, so multi-line text arrives as one message, then submit. A pending question
 # menu takes keystrokes, not a message, so close it first; the text then arrives as a reply.
@@ -76,6 +98,29 @@ worktree() {
   printf '%s' "$wt"
 }
 
+# Once the new session $sess shows its prompt, paste <text>. In the background: pfi waits for us.
+say_when_ready() {
+  (
+    for _ in $(seq 600); do
+      tmux capture-pane -p -t "=$sess:" 2>/dev/null | grep -q '^❯' && { say "$1"; exit; }
+      sleep "${AGENT_READY_POLL:-1}"
+    done
+    log "session never became ready; not sent: $1"
+  ) </dev/null >/dev/null 2>&1 &
+}
+
+# The slash command a comment starts with, as typed, or nothing. Slack replies arrive as
+# "<author> (slack): <text>" (pfi connectors/hub.py `_plane_comment`); Slack only posts a message
+# that starts with "/" behind a space or backticks. All of that is stripped.
+command_in() {
+  local t=$1 nl=$'\n'
+  t="${t#"${t%%[![:space:]]*}"}"
+  [[ $t =~ ^[^:$nl]{1,80}\ \(slack\):[[:space:]]*(.*)$ ]] && t=${BASH_REMATCH[1]}
+  t="${t%"${t##*[![:space:]]}"}"
+  [[ $t =~ ^\`(/[^\`]*)\`$ ]] && t=${BASH_REMATCH[1]}
+  [[ $t != /* ]] || printf '%s' "$t"
+}
+
 run() {
   if has_session; then
     say "$1"
@@ -85,20 +130,26 @@ run() {
   fi
 }
 
-# start <dir> <prompt>: a new interactive session $sess in <dir>.
+# start <dir> <prompt> [<title> --continue]: a new interactive session $sess in <dir>.
 start() {
-  local wt=$1 name title
-  name=$(jq -r '.items[0].name // ""' <<<"$payload")
+  local wt=$1 title=${3:-} resume=${4:-} name bin=${AGENT_SESSION_BIN:-$HOME/.local/bin/agent-session}
+  require_server
+  if [ -z "$title" ]; then
+    name=$(jq -r '.items[0].name // ""' <<<"$payload")
+    title="$sess${name:+: $name}"
+  fi
   trust "$wt"
+  tmux kill-session -t "=$sess" 2>/dev/null || true # a dead pane agent-session left open
+  mkdir -p "$live"
+  printf '%s\n%s\n' "$wt" "$title" >"$live/$sess"
   # Named after the item, so /resume and Remote Control show "HL-1: <title>", not a UUID.
   # No AskUserQuestion: its menu can't be answered by pasting a Plane comment.
   # --add-dir: the skills edit the chezmoi source; outside the worktree, file tools would stop
   # at a permission prompt nobody sees.
-  title="$sess${name:+: $name}"
   src=$(chezmoi source-path 2>/dev/null || true)
   tmux new-session -d -s "$sess" -c "$wt" \
-    "claude --disallowedTools AskUserQuestion ${src:+--add-dir $(printf '%q' "$src")} --name $(printf '%q' "$title") $(printf '%q' "$2")"
-  log "started a session in $wt"
+    "$(printf '%q %q %q' "$bin" "$sess" "$id") --disallowedTools AskUserQuestion ${src:+--add-dir $(printf '%q' "$src")} --name $(printf '%q' "$title") $resume $(printf '%q' "$2")"
+  log "started a session in $wt${resume:+ ($resume)}"
 }
 
 # A fresh reviewer each time: its verdict must cover the PR's current head and nothing else.
@@ -116,7 +167,8 @@ $yolo}"
 }
 
 end_session() {
-  has_session || return 0
+  rm -f "$live/$sess"
+  tmux has-session -t "=$sess" 2>/dev/null || return 0
   tmux send-keys -t "=$sess:" Escape
   sleep 1
   tmux kill-session -t "=$sess" || true
@@ -139,6 +191,9 @@ remove_worktree() {
 }
 
 comment=$(jq -r '.event.context.comment.text // empty' <<<"$payload")
+command=$(command_in "$comment")
+# The item description's first `/goal` line; pfi sends the description as text.
+goal=$(jq -r '.items[0].description // empty' <<<"$payload" | sed -nE 's/^[[:space:]]*(\/goal[[:space:]].*[^[:space:]])[[:space:]]*$/\1/p' | head -n1)
 # Dan's comment answers an open question or adjusts the work; either way the agent carries on
 # where it is. Re-adding agent-refine is the only way to restart from scratch.
 adjust="Dan commented on Plane: $comment
@@ -150,8 +205,20 @@ case $job in refine | build | revise) rm -f "$done_dir/$id" ;; esac
 case $job in
   refine) run "/refine $id${yolo:+
 $yolo}" ;;
-  build) run "/build $id${yolo:+
-$yolo}" ;;
+  build)
+    prompt="/build $id${yolo:+
+$yolo}"
+    if [ -z "$goal" ]; then
+      run "$prompt"
+    elif has_session; then
+      say "$goal"
+      say "$prompt"
+      log "goal and build sent to the running session"
+    else
+      start "$(worktree)" "$prompt"
+      say_when_ready "$goal"
+    fi
+    ;;
   revise)
     if [ -n "$yolo" ]; then
       run "/build $id — the reviewer agent requested changes. Go to step 6: its findings are the latest **Review:** comment on the item (get_item); address each one.
@@ -162,7 +229,13 @@ $yolo"
     ;;
   review) review ;;
   comment)
-    if has_session; then
+    if [ -n "$command" ] && has_session; then
+      say "$command"
+      log "command delivered"
+    elif [ -n "$command" ] && [ -d "$work/wt/$id" ]; then
+      start "$(worktree)" "Resume $id (check its state with get_item)."
+      say_when_ready "$command"
+    elif has_session; then
       say "$adjust"
       log "comment delivered"
     elif [ -d "$work/wt/$id" ]; then
@@ -189,6 +262,26 @@ $yolo"
       rw="$work/wt/$id-review"
       [ ! -d "$rw" ] || git -C "$rw" worktree remove --force "$rw"
       [ -d "$work/wt/$id" ] || rm -f "$done_dir/$id"
+    done
+    ;;
+  resume)
+    # At boot the server may still be coming up.
+    for _ in $(seq 30); do tmux display-message -p '#{pid}' >/dev/null 2>&1 && break; sleep 1; done
+    [ "$id" = all ] && sessions=$(ls "$live" 2>/dev/null) || sessions=$id
+    for sess in $sessions; do
+      id=${sess%-review}
+      if has_session; then
+        log "$sess already running"
+        continue
+      fi
+      wt="$work/wt/$sess" title=$sess # a session started before live markers existed
+      [ ! -f "$live/$sess" ] || { read -r wt && read -r title; } <"$live/$sess"
+      if [ ! -d "$wt" ]; then
+        log "$sess: no worktree $wt; not resumed"
+        rm -f "$live/$sess"
+        continue
+      fi
+      start "$wt" "You were restarted (dev01 rebooted, or Dan ran agent-dispatch resume). Post one comment_item on $id saying so, then carry on where you left off." "$title" --continue
     done
     ;;
   *) echo "unknown job: $job" >&2; exit 2 ;;
