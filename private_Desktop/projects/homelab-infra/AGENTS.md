@@ -4,7 +4,7 @@ For agents started by pfi on dev01 (HL items). `CLAUDE.md` still applies (protec
 list, secrets, guardrails), except "Where and as whom you run": you are **not** on the admin workstation.
 
 ## What you have, what you don't
-- You have: this repo on Forgejo (`homelab/homelab-infra`) as `dan-bot`, Plane via pfi, `just check`.
+- You have: this repo on Forgejo (`dan/homelab-infra`) as `dan-bot`, Plane via pfi, `just check`.
 - You don't have: `~/.config/homelab/*.secret`, Proxmox or Tailscale tokens, SSH to any host, Docker on
   svc01. So `just deploy`, `just run`, `just pve` and `just ts` won't work. Don't try to get around that.
 - You change the homelab only through a PR that Dan merges. Nothing reaches a host before then.
