@@ -96,6 +96,33 @@ def test_every_agent_reads_the_shared_standards(fresh_home):
     assert f"@{standards}" in (home / ".gemini" / "GEMINI.md").read_text()
 
 
+def test_mise_tools_are_on_path_when_shell_plugins_load(fresh_home):
+    """The fzf and zoxide plugins find their tools when only mise provides them."""
+    # Given a machine where fzf comes only from mise (in ~/.local/bin), not from brew
+    home, _, apply = fresh_home
+    apply()
+    tools = home / "mise-tools"
+    tools.mkdir()
+    (tools / "fzf").write_text("#!/bin/sh\n")
+    (tools / "fzf").chmod(0o755)
+    mise = home / ".local" / "bin" / "mise"
+    mise.write_text(f"#!/bin/sh\necho 'path=({tools} $path)'\n")
+    mise.chmod(0o755)
+    omz = home / ".oh-my-zsh" / "oh-my-zsh.sh"
+    omz.parent.mkdir()
+    omz.write_text("(( $+commands[fzf] )) || echo 'fzf plugin: Cannot find fzf'\n")
+
+    # When a new shell starts
+    out = run(
+        ["zsh", "-c", "source ~/.zshrc"],
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+        check=False,
+    )
+
+    # Then the plugins load without complaining
+    assert "Cannot find fzf" not in out.stdout + out.stderr
+
+
 def guard(script: str, payload: dict) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["bash", str(BIN / script)],

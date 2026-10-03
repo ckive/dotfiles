@@ -3,6 +3,13 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
+typeset -U path
+path=("$HOME/.local/bin" $path)
+
+# Dev tools and runtimes (node, pnpm, CLIs) come from mise, before oh-my-zsh so its fzf/zoxide
+# plugins find them: ~/.config/mise/config.toml
+(( $+commands[mise] )) && eval "$(mise activate zsh)"
+
 # oh-my-zsh, powerlevel10k and the two plugins below are fetched by chezmoi
 # (home/.chezmoiexternal.toml), so a new machine gets them on first apply.
 export ZSH="$HOME/.oh-my-zsh"
@@ -10,12 +17,6 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 plugins=(git fzf zoxide zsh-autosuggestions zsh-syntax-highlighting)
 [[ -r $ZSH/oh-my-zsh.sh ]] && source $ZSH/oh-my-zsh.sh
 [[ -r ~/.p10k.zsh ]] && source ~/.p10k.zsh
-
-typeset -U path
-path=("$HOME/.local/bin" $path)
-
-# Dev tools and runtimes (node, pnpm, CLIs) come from mise: ~/.config/mise/config.toml
-(( $+commands[mise] )) && eval "$(mise activate zsh)"
 
 # Python: uv only. `uv run` needs no activation; this hook just makes bare `python`/`pytest`
 # work inside a project. precmd, not chpwd, so a new tab that starts in the project works too.
