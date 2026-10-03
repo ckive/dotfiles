@@ -1,0 +1,6 @@
+{{- /* Codex has no import syntax, so this file is assembled from the shared standards. */ -}}
+{{ include "dot_config/agents/standards.md" }}
+{{- $overlay := joinPath .chezmoi.homeDir ".config/agents/overlay.md" }}
+{{- if stat $overlay }}
+{{ include $overlay }}
+{{- end }}

@@ -1,0 +1,88 @@
+# Target paths ($HOME-relative) this repo never manages. The overlay has its own list.
+
+.DS_Store
+**/.DS_Store
+
+# Per-machine state
+.config/dotfiles
+.local/state
+.cache
+.claude.json
+.claude.json.backup*
+
+# Overlay drop-in slots (owned by the overlay)
+.config/zsh/conf.d
+.config/git/overlay.gitconfig
+.ssh/config.d
+.config/agents/overlay.md
+
+# ---- Claude Code: sessions, caches, credentials ----
+.claude/.credentials.json
+.claude/.last-cleanup
+.claude/*.log
+.claude/*.bak
+.claude/settings.local.json
+.claude/agent-memory
+.claude/backups
+.claude/cache
+.claude/daemon
+.claude/daemon-auth-*
+.claude/debug
+.claude/downloads
+.claude/file-history
+.claude/history.jsonl
+.claude/ide
+.claude/jobs
+.claude/paste-cache
+.claude/plans
+.claude/plugins
+.claude/projects
+.claude/session-env
+.claude/sessions
+.claude/shell-snapshots
+.claude/stats-cache.json
+.claude/statsig
+.claude/tasks
+.claude/todos
+.claude/usage-data
+.claude/.oauth_refresh.lock*
+
+# ---- Codex ----
+.codex/auth.json
+.codex/history.jsonl
+.codex/installation_id
+.codex/log
+.codex/sessions
+.codex/*.sqlite*
+.codex/cache
+.codex/tmp
+.codex/ipc
+.codex/shell_snapshots
+.codex/packages
+.codex/plugins
+.codex/vendor_imports
+.codex/memories
+.codex/models_cache.json
+.codex/version.json
+.codex/session_index.jsonl
+.codex/thread-writer-locks
+.codex/external_agent_session_imports.json
+.codex/computer-use
+.codex/visualizations
+.codex/sqlite
+
+# ---- Gemini / Kimi ----
+.gemini/*
+!.gemini/GEMINI.md
+.kimi-code/*
+!.kimi-code/tui.toml
+
+# ---- OS-specific ----
+{{ if ne .chezmoi.os "darwin" }}
+Library
+.config/kitty
+{{ end }}
+{{ if ne .chezmoi.os "linux" }}
+.config/systemd
+.bashrc
+{{ end }}

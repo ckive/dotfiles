@@ -17,6 +17,12 @@ whenever a shell starts.
 - **Then** GitHub gets exactly one new commit containing both changes, titled like
   `chore(sync): macbook: .zshrc, standards.md`
 
+### 1b. Editing the repo directly works too
+`test_edit_made_in_the_repo_is_published_not_overwritten`
+- **Given** you edit `home/dot_zshrc` in the repo instead of `~/.zshrc`
+- **When** the sync runs
+- **Then** your edit is pushed and copied to `~/.zshrc`. The old copy in `~` does not overwrite it.
+
 ### 2. Changes made on another machine arrive here
 `test_sync_brings_in_changes_pushed_from_another_machine`
 - **Given** the homelab box pushed a new alias in `~/.gitconfig`

@@ -1,0 +1,15 @@
+{{- /* Rendered by `chezmoi init` (install.sh) into ~/.config/chezmoi/chezmoi.toml. */ -}}
+sourceDir = {{ .chezmoi.workingTree | quote }}
+
+[data]
+    # Working tree of the private overlay; base templates read its fragments. Empty = none.
+    overlaySource = {{ env "DOTFILES_OVERLAY_SOURCE" | default (get . "overlaySource") | default "" | quote }}
+
+[git]
+    # dotfiles sync commits and pushes; chezmoi itself never does.
+    autoCommit = false
+    autoPush = false
+
+[add]
+    # Hard-fail on API-key-shaped content: the sync adds files unattended.
+    secrets = "error"

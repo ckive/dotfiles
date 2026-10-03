@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "$HOME/.local/bin/claude-hook-guard-bash" }]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "$HOME/.local/bin/claude-hook-guard-edit" }]
+      }
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+@{{ joinPath .chezmoi.homeDir ".config/agents/standards.md" }}
+{{- $overlay := joinPath .chezmoi.homeDir ".config/agents/overlay.md" }}
+{{- if stat $overlay }}
+@{{ $overlay }}
+{{- end }}

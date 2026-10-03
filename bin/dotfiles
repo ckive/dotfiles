@@ -457,6 +457,16 @@ def sync_repo(inst: Instance, cfg: dict) -> dict | None:
     """Commit, pull and push one repo. Returns a conflict record, or None."""
     push = cfg["mode"] == "push"
     if push:
+        # Edits made in the repo itself go first, and are applied before re-add, so the older
+        # copy in $HOME can't overwrite them.
+        edited = inst.git("status", "--porcelain", "--untracked-files=all", "--", "home")
+        sources = [line[3:].split(" -> ")[-1] for line in edited.stdout.splitlines()]
+        if sources:
+            commit_all(inst, host(cfg))
+            targets = {str(HOME / target_name(s)) for s in sources}
+            existing = [t for t in targets if inst.chezmoi("source-path", t).returncode == 0]
+            if existing:
+                inst.chezmoi("apply", "--force", "--no-tty", *existing)
         re_add = inst.chezmoi("re-add", "--no-tty")
         if re_add.returncode != 0:
             add_warning(f"{inst.name}: chezmoi re-add failed: {re_add.stderr.strip()[:300]}")

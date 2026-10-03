@@ -1,0 +1,63 @@
+#!/bin/bash
+# PreToolUse (Bash): block destructive shell commands.
+#
+# Exit 2 = block; stderr is surfaced to Claude as the blocking reason.
+# Exit 0 = allow.
+
+set -uo pipefail
+
+command -v jq >/dev/null 2>&1 || exit 0
+
+payload="$(cat)"
+cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
+[ -n "$cmd" ] || exit 0
+
+block() {
+  echo "BLOCKED by guard-bash: $1" >&2
+  echo "Command: $cmd" >&2
+  echo "If this is genuinely intended, run it yourself in a terminal." >&2
+  exit 2
+}
+
+# Recursive force-delete
+printf '%s' "$cmd" | grep -qE '(^|[;&|]|\s)rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*f|(^|[;&|]|\s)rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*f[a-zA-Z]*[rR]' \
+  && block "recursive force delete (rm -rf)"
+
+# Recursive delete without -f
+printf '%s' "$cmd" | grep -qE '(^|[;&|]|\s)rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR]' \
+  && block "recursive delete (rm -r)"
+
+# Glob deletes
+printf '%s' "$cmd" | grep -qE '(^|[;&|]|\s)rm\s+[^;&|]*(\*|\s\.\*)' \
+  && block "glob delete (rm with * or .*)"
+
+# History-destroying git operations
+printf '%s' "$cmd" | grep -qE 'git\s+clean\s+(-[a-zA-Z]*\s*)*-[a-zA-Z]*[fd]' \
+  && block "git clean (deletes untracked files)"
+
+printf '%s' "$cmd" | grep -qE 'git\s+reset\s+--hard' \
+  && block "git reset --hard (discards working tree)"
+
+# Bulk staging sweeps in files nobody meant to commit (a tracked state.db once lost data).
+# Quoted strings are dropped first so commit messages can't trip these.
+unq="$(printf '%s' "$cmd" | sed -E "s/\"[^\"]*\"//g; s/'[^']*'//g")"
+printf '%s' "$unq" | grep -qE 'git\s+add\s+([^;&|]*\s)?(-A|--all|\.)([[:space:];&|]|$)' \
+  && block "bulk git add (stage files explicitly by path)"
+printf '%s' "$unq" | grep -qE 'git\s+commit\s+([^;&|]*\s)?(-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:];&|]|$)' \
+  && block "git commit -a (stage files explicitly by path)"
+printf '%s' "$unq" | grep -qE 'git\s+add\s+[^;&|]*\.db([[:space:];&|]|$)' \
+  && block "staging a .db file (runtime state never gets committed)"
+if printf '%s' "$cmd" | grep -qE 'git\s+([^;&|]*\s)?commit'; then
+  cwd="$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)"
+  git -C "${cwd:-.}" diff --cached --name-only 2>/dev/null | grep -qE '\.db$' \
+    && block "a .db file is staged (git restore --staged it)"
+fi
+
+# Force-push, but allow the safe --force-with-lease variant.
+# (grep -E has no lookahead, so strip the safe form first, then test.)
+stripped="$(printf '%s' "$cmd" | sed 's/--force-with-lease[^ ]*//g')"
+printf '%s' "$stripped" | grep -qE 'git\s+push\s+[^;&|]*(--force|\s-f(\s|$))' \
+  && block "git push --force (use --force-with-lease instead)"
+
+
+exit 0

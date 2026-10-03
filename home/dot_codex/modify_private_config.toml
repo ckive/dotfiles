@@ -1,0 +1,10 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- /* ~/.codex/config.toml = what Codex wrote (trusted projects, hook hashes)
+       < this repo's .chezmoitemplates/codex-config.toml < the overlay's codex/config.toml */ -}}
+{{- $live := dict -}}
+{{- if .chezmoi.stdin }}{{ $live = fromToml .chezmoi.stdin }}{{ end -}}
+{{- $base := include ".chezmoitemplates/codex-config.toml" | fromToml -}}
+{{- $over := dict -}}
+{{- $src := get . "overlaySource" | default "" -}}
+{{- if $src }}{{ $p := joinPath $src "codex/config.toml" }}{{ if stat $p }}{{ $over = include $p | fromToml }}{{ end }}{{ end -}}
+{{ mergeOverwrite $live $base $over | toToml }}

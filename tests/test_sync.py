@@ -25,6 +25,21 @@ def test_sync_commits_local_edits_in_one_conventional_commit(world):
     assert "- test" in world.base.show("home/dot_config/agents/standards.md")
 
 
+def test_edit_made_in_the_repo_is_published_not_overwritten(world):
+    """1b. Editing the repo directly works too: the sync publishes it and applies it."""
+    # Given you edit the source file in the repo instead of the file in $HOME
+    mac = world.machine("macbook")
+    src = mac.base_src / "home" / "dot_zshrc"
+    src.write_text(src.read_text() + "alias from_repo=1\n")
+
+    # When the sync runs
+    mac.sync()
+
+    # Then the edit is on GitHub and in $HOME, not reverted to the old $HOME copy
+    assert "alias from_repo=1" in world.base.show("home/dot_zshrc")
+    assert "alias from_repo=1" in mac.read(".zshrc")
+
+
 def test_sync_brings_in_changes_pushed_from_another_machine(world):
     """2. Changes made on another machine arrive here, without a commit from this one."""
     # Given the homelab box pushed a new git alias
