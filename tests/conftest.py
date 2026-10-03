@@ -129,7 +129,9 @@ class World:
         run(["git", "push", "-q", str(bare), "main"], cwd=work, env=self.env)
         return Remote(bare, self.env)
 
-    def machine(self, name: str, mode: str = "push", overlay: bool = True) -> Machine:
+    def machine(
+        self, name: str, mode: str = "push", overlay: bool = True, first_sync: bool = True
+    ) -> Machine:
         home = self.root / "machines" / name
         home.mkdir(parents=True)
         src = home / "src"
@@ -160,7 +162,8 @@ class World:
             lines.append('overlay = "personal"')
         (dcfg / "config.toml").write_text("\n".join(lines) + "\n")
         m = Machine(name, home, env, base_src, overlay_src, notify_log, mode)
-        m.sync()  # first apply, like a fresh install
+        if first_sync:
+            m.sync()  # first apply, like a fresh install
         return m
 
     def offline(self, remote: Remote) -> Path:

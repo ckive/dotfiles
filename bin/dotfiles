@@ -479,10 +479,14 @@ def ahead_behind(inst: Instance) -> tuple[int, int]:
     return (int(out[0]), int(out[1])) if len(out) == 2 else (0, 0)
 
 
-def sync_repo(inst: Instance, cfg: dict) -> dict | None:
-    """Commit, pull and push one repo. Returns a conflict record, or None."""
+def sync_repo(inst: Instance, cfg: dict, first: bool = False) -> dict | None:
+    """Commit, pull and push one repo. Returns a conflict record, or None.
+
+    On a machine's first sync nothing in $HOME is captured: the repo versions are installed
+    over whatever config the machine had before.
+    """
     push = cfg["mode"] == "push"
-    if push:
+    if push and not first:
         # Edits made in the repo itself go first, and are applied before re-add, so the older
         # copy in $HOME can't overwrite them.
         edited = inst.git("status", "--porcelain", "--untracked-files=all", "--", "home")
@@ -493,7 +497,7 @@ def sync_repo(inst: Instance, cfg: dict) -> dict | None:
             existing = [t for t in targets if inst.chezmoi("source-path", t).returncode == 0]
             if existing:
                 inst.chezmoi("apply", "--force", "--no-tty", *existing)
-        re_add = inst.chezmoi("re-add", "--no-tty")
+        re_add = inst.chezmoi("re-add", "--no-tty", "--exclude", "externals")
         if re_add.returncode != 0:
             add_warning(f"{inst.name}: chezmoi re-add failed: {re_add.stderr.strip()[:300]}")
         commit_all(inst, host(cfg))
@@ -591,13 +595,14 @@ def source_dir_name(rel: Path) -> str:
 
 def do_sync(cfg: dict) -> None:
     """One sync pass. Caller holds the lock."""
-    if cfg["mode"] == "push":
+    first = not LAST.exists()
+    if cfg["mode"] == "push" and not first:
         capture(cfg)
         capture_claude_settings(cfg)
         capture_mcp(cfg)
     conflict = None
     for inst in instances(cfg):
-        c = sync_repo(inst, cfg)
+        c = sync_repo(inst, cfg, first)
         if c and not conflict:
             conflict = c
     for inst in instances(cfg):

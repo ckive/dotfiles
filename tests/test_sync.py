@@ -40,6 +40,27 @@ def test_edit_made_in_the_repo_is_published_not_overwritten(world):
     assert "alias from_repo=1" in mac.read(".zshrc")
 
 
+def test_first_sync_on_a_used_machine_installs_repo_versions(world):
+    """1c. Setting up a machine that already has old config: the repo wins, nothing is pushed."""
+    # Given a machine whose $HOME already has an older .zshrc, before its first sync
+    before = world.base.commits()
+    mac = world.machine("macbook", first_sync=False)
+    mac.write(".zshrc", "alias df='chezmoi'\n")
+
+    # When it syncs for the first time
+    mac.sync()
+
+    # Then $HOME has the repo's version and the old file was not published
+    assert "alias gs='git status'" in mac.read(".zshrc")
+    assert world.base.commits() == before
+    assert "alias df" not in world.base.show("home/dot_zshrc")
+
+    # And from then on, local edits are published as usual
+    mac.write(".zshrc", mac.read(".zshrc") + "alias later=1\n")
+    mac.sync()
+    assert "alias later=1" in world.base.show("home/dot_zshrc")
+
+
 def test_sync_brings_in_changes_pushed_from_another_machine(world):
     """2. Changes made on another machine arrive here, without a commit from this one."""
     # Given the homelab box pushed a new git alias
