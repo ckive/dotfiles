@@ -12,7 +12,7 @@ list, secrets, guardrails), except "Where and as whom you run": you are **not** 
 ## Layout
 | Path | What |
 |---|---|
-| `ansible/` | `site.yml` and `playbooks/` per layer; `roles/*/README.md` per role; `host_vars/<host>.yml`; rules in `ansible/CLAUDE.md` |
+| `ansible/` | `site.yml` and `playbooks/` per layer; `roles/*/README.md` per role; `host_vars/<host>.yml` |
 | `docker/<host>/<stack>/` | Compose stacks; `*.j2` are templated by `roles/compose_stacks`, `.env` is rendered from secrets |
 | `proxmox/`, `tailscale/`, `dns/` | Guest specs and API scripts; tailnet policy; DNS |
 | `docs/` | `architecture.md`, `services.md`, `sdlc.md`; `plans/` (designs); `runbooks/` (human procedures) |
