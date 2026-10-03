@@ -1,15 +1,13 @@
 # macOS packages. Dev CLIs and runtimes are in ~/.config/mise/config.toml, not here.
 # The sync runs `brew bundle` when this file changes.
+# Apps already in /Applications (installed by hand) are skipped instead of reinstalled.
+def installed?(app) = File.exist?("/Applications/#{app}.app")
+
 
 tap "automic-vault/isotopes"
-brew "glib"
-brew "cairo"
-brew "gdk-pixbuf"
-brew "pango"
-brew "adwaita-icon-theme"
+brew "jq"
 brew "btop"
 brew "coreutils"
-brew "byobu"
 brew "ccache"
 brew "chezmoi"
 brew "clamav"
@@ -19,17 +17,11 @@ brew "ffmpeg"
 brew "pkgconf"
 brew "libusb"
 brew "gnupg"
-brew "gobject-introspection"
-brew "graphene"
-brew "gtk4"
-brew "pillow"
-brew "libadwaita"
 brew "mpv"
 brew "nmap"
 brew "ocrmypdf"
 brew "ov"
 brew "rmlint"
-brew "sox"
 brew "tree"
 brew "vcpkg"
 brew "wakeonlan"
@@ -40,7 +32,18 @@ cask "db-browser-for-sqlite"
 cask "docker-desktop"
 cask "monitorcontrol"
 cask "opensuperwhisper"
-cask "orbstack"
-cask "ungoogled-chromium"
 cask "vorssaint"
-brew "jq"
+cask "alacritty" unless installed?("Alacritty")
+cask "chatgpt" unless installed?("ChatGPT")
+cask "claude" unless installed?("Claude")
+cask "clion" unless installed?("CLion")
+cask "codex-app" unless installed?("Codex")
+cask "firefox" unless installed?("Firefox")
+cask "google-chrome" unless installed?("Google Chrome")
+cask "keka" unless installed?("Keka")
+cask "kitty" unless installed?("kitty")
+cask "postman" unless installed?("Postman")
+cask "rectangle" unless installed?("Rectangle")
+cask "the-unarchiver" unless installed?("The Unarchiver")
+cask "visual-studio-code" unless installed?("Visual Studio Code")
+cask "wireshark-app" unless installed?("Wireshark")
