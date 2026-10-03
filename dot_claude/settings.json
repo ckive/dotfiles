@@ -102,7 +102,8 @@
     "ansible-new-ee@claude-ansible-skills": true,
     "ansible-new-molecule@claude-ansible-skills": true,
     "ansible-docs@claude-ansible-skills": true,
-    "ansible-zen@claude-ansible-skills": true
+    "ansible-zen@claude-ansible-skills": true,
+    "ansible-skills@ansible-skills-marketplace": true
   },
   "extraKnownMarketplaces": {
     "mattpocock": {
