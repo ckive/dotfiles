@@ -1,6 +1,6 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-shell_scripts := "install.sh home/dot_local/bin/executable_claude-hook-guard-bash home/dot_local/bin/executable_claude-hook-guard-edit home/dot_local/bin/executable_claude-notify"
+shell_scripts := "install.sh tests/e2e-checks.sh home/dot_local/bin/executable_claude-hook-guard-bash home/dot_local/bin/executable_claude-hook-guard-edit home/dot_local/bin/executable_claude-notify"
 
 default: check
 
@@ -36,6 +36,4 @@ e2e:
       apt-get update -q && apt-get install -yq git ca-certificates curl >/dev/null && \
       git config --global --add safe.directory "*" && git clone -q /src /root/dotfiles && cd /root/dotfiles && \
       DOTFILES_MODE=pull DOTFILES_OVERLAY=none DOTFILES_SKIP_SCHEDULE=1 sh install.sh && \
-      test -L /root/.claude/skills/rmsesh && grep -q Standards /root/.config/agents/standards.md && \
-      test -f /root/.oh-my-zsh/oh-my-zsh.sh && /root/.local/bin/mise ls --current | grep -q ripgrep && \
-      echo E2E-OK'
+      sh tests/e2e-checks.sh'
