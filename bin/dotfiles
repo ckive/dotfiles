@@ -1,0 +1,480 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.12"
+# ///
+"""dotfiles: keep this machine in sync with the public base repo and a private overlay.
+
+Two chezmoi instances share $HOME: the base (default chezmoi config) and an optional overlay
+(its own config, state and cache). See README.md and docs/scenarios.md.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+
+HOME = Path(os.environ.get("HOME", str(Path.home())))
+CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
+STATE_HOME = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local" / "state"))
+CACHE_HOME = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache"))
+STATE = STATE_HOME / "dotfiles"
+CONFLICT = STATE / "conflict.json"
+LAST = STATE / "last.json"
+LOCK = STATE / "sync.lock"
+LOCK_STALE_SECONDS = 15 * 60
+
+# Directories whose new files are captured into the private overlay.
+SKILL_HOME = HOME / ".config" / "agents" / "skills"
+SKILL_LINK_DIRS = (HOME / ".claude" / "skills", HOME / ".agents" / "skills")
+CAPTURE_DIRS = tuple(HOME / ".claude" / d for d in ("agents", "commands", "rules"))
+
+# chezmoi source-name attributes, stripped to turn a source path into a target path.
+SOURCE_PREFIXES = (
+    "after_", "before_", "create_", "empty_", "encrypted_", "exact_", "executable_",
+    "external_", "literal_", "modify_", "once_", "onchange_", "private_", "readonly_",
+    "remove_", "run_", "symlink_",
+)
+
+
+# ---------------------------------------------------------------- helpers
+
+
+def run(cmd: list[str], cwd: Path | None = None, check: bool = False, env: dict | None = None):
+    return subprocess.run(
+        cmd, cwd=cwd, capture_output=True, text=True, check=check,
+        env={**os.environ, **(env or {})},
+    )
+
+
+def load_config() -> dict:
+    path = CONFIG_HOME / "dotfiles" / "config.toml"
+    if not path.exists():
+        return {"mode": "push"}
+    with path.open("rb") as f:
+        return {"mode": "push", **tomllib.load(f)}
+
+
+def host(cfg: dict) -> str:
+    return os.environ.get("DOTFILES_HOST") or cfg.get("host") or socket.gethostname().split(".")[0]
+
+
+def notify(message: str) -> None:
+    log = os.environ.get("DOTFILES_NOTIFY_LOG")
+    if log:
+        with open(log, "a") as f:
+            f.write(message + "\n")
+        return
+    if sys.platform == "darwin":
+        script = f'display notification {json.dumps(message)} with title "dotfiles"'
+        run(["osascript", "-e", script])
+    elif shutil.which("notify-send") and (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    ):
+        run(["notify-send", "dotfiles", message])
+
+
+def target_name(source_rel: str) -> str:
+    """Map a source path like home/private_dot_config/x.tmpl to .config/x."""
+    parts = source_rel.split("/")
+    if parts and parts[0] == "home":
+        parts = parts[1:]
+    out = []
+    for part in parts:
+        changed = True
+        while changed:
+            changed = False
+            for prefix in SOURCE_PREFIXES:
+                if part.startswith(prefix):
+                    part, changed = part[len(prefix):], True
+        if part.startswith("dot_"):
+            part = "." + part[4:]
+        out.append(part.removesuffix(".tmpl"))
+    return "/".join(out)
+
+
+def read_json(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def write_json(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n")
+    tmp.replace(path)
+
+
+# ---------------------------------------------------------------- instances
+
+
+@dataclass
+class Instance:
+    name: str
+    flags: list[str]
+
+    def chezmoi(self, *args: str, check: bool = False):
+        return run(["chezmoi", *self.flags, *args], check=check)
+
+    @property
+    def repo(self) -> Path:
+        out = self.chezmoi("git", "--", "rev-parse", "--show-toplevel", check=True)
+        return Path(out.stdout.strip())
+
+    def git(self, *args: str, check: bool = False, env: dict | None = None):
+        return run(["git", *args], cwd=self.repo, check=check, env=env)
+
+    def managed(self) -> set[Path]:
+        out = self.chezmoi("managed", "--path-style", "absolute")
+        return {Path(p) for p in out.stdout.splitlines() if p}
+
+    def apply(self) -> None:
+        out = self.chezmoi("apply", "--force", "--no-tty")
+        if out.returncode != 0:
+            add_warning(f"{self.name}: chezmoi apply failed: {out.stderr.strip()[:300]}")
+
+
+def instances(cfg: dict) -> list[Instance]:
+    """Overlay first, then base: the base renders files that read overlay fragments."""
+    result = []
+    overlay = cfg.get("overlay")
+    if overlay:
+        cdir = CONFIG_HOME / "chezmoi"
+        result.append(Instance(overlay, [
+            "--config", str(cdir / f"{overlay}.toml"),
+            "--persistent-state", str(cdir / f"{overlay}-state.boltdb"),
+            "--cache", str(CACHE_HOME / f"chezmoi-{overlay}"),
+        ]))
+    result.append(Instance("base", []))
+    return result
+
+
+def instance_named(cfg: dict, name: str) -> Instance:
+    for inst in instances(cfg):
+        if inst.name == name:
+            return inst
+    raise SystemExit(f"dotfiles: no instance named {name!r}")
+
+
+# ---------------------------------------------------------------- state
+
+
+_warnings: list[str] = []
+
+
+def add_warning(message: str) -> None:
+    _warnings.append(message)
+
+
+class Lock:
+    def __enter__(self) -> bool:
+        STATE.mkdir(parents=True, exist_ok=True)
+        try:
+            LOCK.mkdir()
+        except FileExistsError:
+            if not self._stale():
+                self.held = False
+                return False
+            shutil.rmtree(LOCK, ignore_errors=True)
+            LOCK.mkdir()
+        (LOCK / "pid").write_text(json.dumps({"pid": os.getpid()}))
+        self.held = True
+        return True
+
+    def __exit__(self, *exc) -> None:
+        if self.held:
+            shutil.rmtree(LOCK, ignore_errors=True)
+
+    @staticmethod
+    def _stale() -> bool:
+        info = read_json(LOCK / "pid") or {}
+        try:
+            age = dt.datetime.now().timestamp() - LOCK.stat().st_mtime
+        except OSError:
+            return True
+        if age > LOCK_STALE_SECONDS:
+            return True
+        pid = info.get("pid")
+        if not isinstance(pid, int):
+            return False
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False
+        return False
+
+
+# ---------------------------------------------------------------- sync
+
+
+def commit_all(inst: Instance, who: str) -> None:
+    inst.git("add", "--all")
+    staged = inst.git("diff", "--cached", "--name-only").stdout.split()
+    if not staged:
+        return
+    names = [target_name(p) for p in staged]
+    summary = ", ".join(names[:3]) + (f" +{len(names) - 3} more" if len(names) > 3 else "")
+    inst.git("commit", "-q", "-m", f"chore(sync): {who}: {summary}", check=True)
+
+
+def has_upstream(inst: Instance) -> bool:
+    return inst.git("rev-parse", "--abbrev-ref", "@{u}").returncode == 0
+
+
+def ahead_behind(inst: Instance) -> tuple[int, int]:
+    out = inst.git("rev-list", "--left-right", "--count", "HEAD...@{u}").stdout.split()
+    return (int(out[0]), int(out[1])) if len(out) == 2 else (0, 0)
+
+
+def sync_repo(inst: Instance, cfg: dict) -> dict | None:
+    """Commit, pull and push one repo. Returns a conflict record, or None."""
+    push = cfg["mode"] == "push"
+    if push:
+        re_add = inst.chezmoi("re-add", "--no-tty")
+        if re_add.returncode != 0:
+            add_warning(f"{inst.name}: chezmoi re-add failed: {re_add.stderr.strip()[:300]}")
+        commit_all(inst, host(cfg))
+    if inst.git("fetch", "-q", "origin").returncode != 0:
+        return None  # offline: try again next time
+    if not has_upstream(inst):
+        add_warning(f"{inst.name}: branch has no upstream")
+        return None
+    ahead, behind = ahead_behind(inst)
+    if not push:
+        if behind:
+            inst.git("reset", "-q", "--hard", "@{u}")
+        return None
+    if behind and ahead:
+        if inst.git("rebase", "-q", "@{u}").returncode != 0:
+            files = inst.git("diff", "--name-only", "--diff-filter=U").stdout.split()
+            inst.git("rebase", "--abort")
+            return {
+                "instance": inst.name,
+                "files": files,
+                "targets": [target_name(f) for f in files],
+                "at": dt.datetime.now().isoformat(timespec="seconds"),
+            }
+    elif behind:
+        inst.git("merge", "-q", "--ff-only", "@{u}")
+    if ahead_behind(inst)[0] and inst.git("push", "-q").returncode != 0:
+        add_warning(f"{inst.name}: push failed; will retry")
+    return None
+
+
+def capture(cfg: dict) -> None:
+    """Save new skills/agents/commands/rules to the private overlay."""
+    insts = instances(cfg)
+    if len(insts) < 2:
+        return
+    overlay = insts[0]
+    managed = set().union(*(i.managed() for i in insts))
+
+    for name in _new_skills(managed):
+        _adopt_skill(overlay, name)
+
+    for d in CAPTURE_DIRS:
+        if not d.is_dir():
+            continue
+        new = [str(p) for p in d.rglob("*") if p.is_file() and p not in managed]
+        if new:
+            out = overlay.chezmoi("add", "--no-tty", *new)
+            if out.returncode != 0:
+                add_warning(f"could not save {', '.join(new)}: {out.stderr.strip()[:300]}")
+
+
+def _new_skills(managed: set[Path]) -> list[str]:
+    names = set()
+    for d in (SKILL_HOME, *SKILL_LINK_DIRS):
+        if not d.is_dir():
+            continue
+        for p in d.iterdir():
+            if p.is_dir() and not p.is_symlink() and (p / "SKILL.md").exists():
+                if p not in managed and (p / "SKILL.md") not in managed:
+                    names.add(p.name)
+    return sorted(names)
+
+
+def _adopt_skill(overlay: Instance, name: str) -> None:
+    """Store the skill once under ~/.config/agents/skills and link it into each agent."""
+    home = SKILL_HOME / name
+    for d in SKILL_LINK_DIRS:
+        p = d / name
+        if p.is_dir() and not p.is_symlink():
+            if home.exists():
+                add_warning(f"skill {name} exists in two places; kept {home}")
+                continue
+            home.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(p), str(home))
+    out = overlay.chezmoi("add", "--no-tty", str(home))
+    if out.returncode != 0:
+        add_warning(f"could not save skill {name}: {out.stderr.strip()[:300]}")
+        return
+    source_home = overlay.repo / "home"
+    for d in SKILL_LINK_DIRS:
+        rel = d.relative_to(HOME)
+        src = source_home / source_dir_name(rel) / f"symlink_{name}.tmpl"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text(
+            "{{ .chezmoi.homeDir }}/" + str(home.relative_to(HOME)) + "\n"
+        )
+        link = d / name
+        if not link.exists() and not link.is_symlink():
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to(home)
+
+
+def source_dir_name(rel: Path) -> str:
+    """Source-state name of a target directory, e.g. .claude/skills -> dot_claude/skills."""
+    return "/".join("dot_" + p[1:] if p.startswith(".") else p for p in rel.parts)
+
+
+def cmd_sync(_args) -> int:
+    cfg = load_config()
+    with Lock() as got:
+        if not got:
+            print("dotfiles: sync already running")
+            return 0
+        if CONFLICT.exists():
+            print(banner_text(read_json(CONFLICT) or {}))
+            return 0
+        if cfg["mode"] == "push":
+            capture(cfg)
+        conflict = None
+        for inst in instances(cfg):
+            c = sync_repo(inst, cfg)
+            if c and not conflict:
+                conflict = c
+        for inst in instances(cfg):
+            if not conflict or conflict["instance"] != inst.name:
+                inst.apply()
+        if conflict:
+            write_json(CONFLICT, conflict)
+            notify(f"Clash in {', '.join(conflict['targets'])}. Run: dotfiles resolve")
+        write_json(LAST, {
+            "at": dt.datetime.now().isoformat(timespec="seconds"),
+            "warnings": _warnings,
+        })
+    return 0
+
+
+# ---------------------------------------------------------------- status / resolve
+
+
+def banner_text(conflict: dict) -> str:
+    return f"dotfiles: clash in {', '.join(conflict.get('targets', []))}, run: dotfiles resolve"
+
+
+def cmd_status(args) -> int:
+    conflict = read_json(CONFLICT) if CONFLICT.exists() else None
+    last = read_json(LAST) or {}
+    if args.banner:
+        if conflict:
+            print(banner_text(conflict))
+        return 0
+    if conflict:
+        print(f"Clash in {', '.join(conflict['targets'])} ({conflict['instance']} repo).")
+        print("Run: dotfiles resolve")
+    print(f"Last sync: {last.get('at', 'never')}")
+    for w in last.get("warnings", []):
+        print(f"warning: {w}")
+    return 1 if conflict else 0
+
+
+CHOICES = {"1": "mine", "2": "theirs", "3": "merge"}
+
+
+def cmd_resolve(args) -> int:
+    conflict = read_json(CONFLICT) if CONFLICT.exists() else None
+    if not conflict:
+        print("dotfiles: nothing to resolve")
+        return 0
+    cfg = load_config()
+    inst = instance_named(cfg, conflict["instance"])
+    choice = args.choice
+    if not choice:
+        for f in conflict["files"]:
+            print(f"--- {target_name(f)}: this machine vs. the other one ---")
+            print(inst.git("diff", "@{u}", "HEAD", "--", f).stdout)
+        print("1) keep mine   2) take theirs   3) merge by hand")
+        choice = CHOICES.get(input("choice [1-3]: ").strip())
+        if not choice:
+            print("dotfiles: no choice made")
+            return 1
+
+    if choice == "mine":
+        ok = inst.git("rebase", "-q", "-X", "theirs", "@{u}").returncode == 0
+    elif choice == "theirs":
+        stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+        for t in conflict["targets"]:
+            src = HOME / t
+            if src.is_file():
+                dest = STATE / "conflicts" / stamp / t
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+        ok = inst.git("rebase", "-q", "-X", "ours", "@{u}").returncode == 0
+    else:
+        ok = _merge_by_hand(inst)
+    if not ok:
+        inst.git("rebase", "--abort")
+        print("dotfiles: could not finish automatically; nothing changed. Try another choice.")
+        return 1
+
+    if ahead_behind(inst)[0] and inst.git("push", "-q").returncode != 0:
+        print("dotfiles: resolved locally; push failed, the next sync will retry")
+    CONFLICT.unlink(missing_ok=True)
+    for i in instances(cfg):
+        i.apply()
+    print("dotfiles: resolved")
+    return 0
+
+
+def _merge_by_hand(inst: Instance) -> bool:
+    editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
+    if inst.git("rebase", "-q", "@{u}").returncode == 0:
+        return True
+    while True:
+        files = inst.git("diff", "--name-only", "--diff-filter=U").stdout.split()
+        if not files:
+            return False
+        for f in files:
+            path = inst.repo / f
+            if subprocess.run([editor, str(path)]).returncode != 0:
+                return False
+            if "<<<<<<<" in path.read_text() or ">>>>>>>" in path.read_text():
+                print(f"dotfiles: {target_name(f)} still has conflict markers")
+                return False
+            inst.git("add", "--", f)
+        step = inst.git("rebase", "--continue", env={"GIT_EDITOR": "true"})
+        if step.returncode == 0:
+            return True
+
+
+# ---------------------------------------------------------------- main
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="dotfiles", description=__doc__.splitlines()[0])
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("sync", help="save local edits, pull other machines' changes, apply")
+    p = sub.add_parser("status", help="show sync health")
+    p.add_argument("--banner", action="store_true", help="one line, only if action is needed")
+    p = sub.add_parser("resolve", help="fix a clash between machines")
+    p.add_argument("--choice", choices=["mine", "theirs", "merge"])
+    args = parser.parse_args(argv)
+    return {"sync": cmd_sync, "status": cmd_status, "resolve": cmd_resolve}[args.cmd](args)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
