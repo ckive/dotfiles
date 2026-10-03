@@ -1,6 +1,7 @@
 #!/bin/sh
 # Checks after install.sh on a fresh machine (scenario 17). Prints every result.
 # shellcheck disable=SC2016 # each check is single-quoted on purpose; sh -c expands it
+export PATH="$HOME/.local/bin:$PATH" # as in a new login shell
 fail=0
 check() {
   if sh -c "$2" >/dev/null 2>&1; then echo "ok   $1"; else
