@@ -34,7 +34,7 @@ run:
 e2e:
     docker run --rm -v "$PWD:/src:ro" debian:13 bash -c '\
       apt-get update -q && apt-get install -yq git ca-certificates curl >/dev/null && \
-      git clone -q /src /root/dotfiles && cd /root/dotfiles && \
+      git config --global --add safe.directory "*" && git clone -q /src /root/dotfiles && cd /root/dotfiles && \
       DOTFILES_MODE=pull DOTFILES_OVERLAY=none DOTFILES_SKIP_SCHEDULE=1 sh install.sh && \
       test -L /root/.claude/skills/rmsesh && grep -q Standards /root/.config/agents/standards.md && \
       test -f /root/.oh-my-zsh/oh-my-zsh.sh && /root/.local/bin/mise ls --current | grep -q ripgrep && \
