@@ -1,0 +1,4 @@
+#!/bin/sh
+# ~/.claude/settings.json = this repo's claude/settings.json + the overlay's claude/settings.json,
+# plus top-level keys Claude writes at runtime. Merge rules: bin/dotfiles render-claude-settings.
+exec {{ joinPath .chezmoi.workingTree "bin/dotfiles" | quote }} render-claude-settings

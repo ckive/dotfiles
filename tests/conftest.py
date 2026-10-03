@@ -6,6 +6,7 @@ touches the developer's own config or GitHub.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -120,6 +121,8 @@ class World:
             p = work / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content)
+            if rel in EXECUTABLE:
+                p.chmod(0o755)
         run(["git", "init", "-q", "-b", "main"], cwd=work, env=self.env)
         run(["git", "add", "--all"], cwd=work, env=self.env)
         run(["git", "commit", "-q", "-m", "seed"], cwd=work, env=self.env)
@@ -170,19 +173,34 @@ class World:
         shutil.move(hidden, remote.path)
 
 
+TEST_IGNORES = (
+    "notifications.log\nsrc\nfake-editor.sh\n.cache\n.zsh_history\n.local/state\n"
+    ".claude.json\n.claude/plugins\n.claude/projects\n"
+)
+
 BASE_SEED = {
     ".chezmoiroot": "home\n",
+    "bin/dotfiles": DOTFILES.read_text(),
+    "claude/settings.json": json.dumps({
+        "enabledPlugins": {"context7@claude-plugins-official": True},
+        "permissions": {"allow": ["Bash(git status)"]},
+    }),
+    "home/dot_claude/modify_settings.json.tmpl": (
+        REPO / "home/dot_claude/modify_settings.json.tmpl"
+    ).read_text(),
     "home/dot_zshrc": "export EDITOR=nano\nalias gs='git status'\n",
     "home/dot_gitconfig": "[alias]\n\tst = status\n",
     "home/dot_config/agents/standards.md": "# Standards\n\n- be concise\n",
-    "home/.chezmoiignore": "notifications.log\nsrc\n",
+    "home/.chezmoiignore": TEST_IGNORES,
 }
 
 OVERLAY_SEED = {
     ".chezmoiroot": "home\n",
     "home/dot_config/zsh/conf.d/personal.zsh": "export PERSONAL=1\n",
-    "home/.chezmoiignore": "notifications.log\nsrc\n",
+    "home/.chezmoiignore": TEST_IGNORES,
 }
+
+EXECUTABLE = {"bin/dotfiles"}
 
 
 @pytest.fixture
