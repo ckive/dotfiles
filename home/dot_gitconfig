@@ -1,29 +1,4 @@
-# This is Git's per-user configuration file.
-# Managed by chezmoi — edit via `chezmoi edit ~/.gitconfig`, then `chezmoi apply`.
-
-# Default identity is GitHub's; repos with a Forgejo remote switch to dan (see includeIf below).
-[user]
-	name = ckive
-	email = danyang2023@u.northwestern.edu
-	signingkey = ~/.ssh/id_ed25519_signing.pub
-
-[gpg]
-	format = ssh
-
-[gpg "ssh"]
-	allowedSignersFile = ~/.config/git/allowed_signers
-
-[commit]
-	gpgsign = true
-
-[tag]
-	gpgsign = true
-
-[includeIf "hasconfig:remote.*.url:ssh://git@git.home.arpa:2222/**"]
-	path = ~/.gitconfig-forgejo
-[includeIf "hasconfig:remote.*.url:https://git.home.arpa/**"]
-	path = ~/.gitconfig-forgejo
-
+# Shared git defaults. Identity and signing come from the overlay (included last, so it wins).
 [alias]
 	s = status
 	d = diff
@@ -48,3 +23,6 @@
 
 [init]
 	defaultBranch = main
+
+[include]
+	path = ~/.config/git/overlay.gitconfig

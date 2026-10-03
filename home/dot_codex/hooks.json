@@ -1,60 +1,13 @@
 {
   "hooks": {
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.local/bin/claude-hook-chezmoi-add",
-            "type": "command"
-          },
-          {
-            "command": "$HOME/.local/bin/claude-hook-shortcuts-reminder",
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write"
-      }
-    ],
     "PreToolUse": [
       {
-        "hooks": [
-          {
-            "command": "$HOME/.local/bin/claude-hook-guard-bash",
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "$HOME/.local/bin/claude-hook-guard-bash" }]
       },
       {
-        "hooks": [
-          {
-            "command": "$HOME/.local/bin/claude-hook-guard-edit",
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write"
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.local/bin/chezmoi-session-sync",
-            "timeout": 15000,
-            "type": "command"
-          }
-        ],
-        "matcher": "startup|resume"
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "command": "$HOME/.local/bin/claude-hook-stop-readd",
-            "type": "command"
-          }
-        ]
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "$HOME/.local/bin/claude-hook-guard-edit" }]
       }
     ]
   }

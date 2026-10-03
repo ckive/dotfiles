@@ -85,11 +85,11 @@ claude() {
   fi
 }
 
-# Dotfiles are managed by chezmoi (source dir: `chezmoi source-path`).
+# Dotfiles: `dotfiles status` / `dotfiles sync` (see the repo README). Raw chezmoi:
 #   chezmoi cd       jump to the source dir
 #   chezmoi edit <f> edit a managed file
 #   chezmoi apply    push source -> home
 #   chezmoi re-add   pull home -> source
 #   chezmoi update   pull from remote and apply
-alias df='chezmoi'
-alias dfcd='chezmoi cd'
+alias cz='chezmoi'
+alias czcd='chezmoi cd'
