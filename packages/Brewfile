@@ -3,7 +3,6 @@
 # Apps already in /Applications (installed by hand) are skipped instead of reinstalled.
 def installed?(app) = File.exist?("/Applications/#{app}.app")
 
-
 tap "automic-vault/isotopes"
 brew "jq"
 brew "btop"
