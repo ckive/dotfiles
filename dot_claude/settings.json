@@ -116,6 +116,12 @@
         "source": "git",
         "url": "https://github.com/leogallego/claude-ansible-skills.git"
       }
+    },
+    "ansible-skills-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "sigridjineth/hello-ansible-skills"
+      }
     }
   },
   "effortLevel": "high",
