@@ -20,43 +20,56 @@ block() {
 }
 
 # Recursive force-delete
-printf '%s' "$cmd" | grep -qE '(^|[;&|]|\s)rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*f|(^|[;&|]|\s)rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*f[a-zA-Z]*[rR]' &&
-  block "recursive force delete (rm -rf)"
+printf '%s' "$cmd" | grep -qE '(^|[;&|]|\s)rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*f|(^|[;&|]|\s)rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*f[a-zA-Z]*[rR]' \
+  && block "recursive force delete (rm -rf)"
 
 # Recursive delete without -f
-printf '%s' "$cmd" | grep -qE '(^|[;&|]|\s)rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR]' &&
-  block "recursive delete (rm -r)"
+printf '%s' "$cmd" | grep -qE '(^|[;&|]|\s)rm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR]' \
+  && block "recursive delete (rm -r)"
 
 # Glob deletes
-printf '%s' "$cmd" | grep -qE '(^|[;&|]|\s)rm\s+[^;&|]*(\*|\s\.\*)' &&
-  block "glob delete (rm with * or .*)"
+printf '%s' "$cmd" | grep -qE '(^|[;&|]|\s)rm\s+[^;&|]*(\*|\s\.\*)' \
+  && block "glob delete (rm with * or .*)"
 
 # History-destroying git operations
-printf '%s' "$cmd" | grep -qE 'git\s+clean\s+(-[a-zA-Z]*\s*)*-[a-zA-Z]*[fd]' &&
-  block "git clean (deletes untracked files)"
+printf '%s' "$cmd" | grep -qE 'git\s+clean\s+(-[a-zA-Z]*\s*)*-[a-zA-Z]*[fd]' \
+  && block "git clean (deletes untracked files)"
 
-printf '%s' "$cmd" | grep -qE 'git\s+reset\s+--hard' &&
-  block "git reset --hard (discards working tree)"
+printf '%s' "$cmd" | grep -qE 'git\s+reset\s+--hard' \
+  && block "git reset --hard (discards working tree)"
 
 # Bulk staging sweeps in files nobody meant to commit (a tracked state.db once lost data).
 # Quoted strings are dropped first so commit messages can't trip these.
 unq="$(printf '%s' "$cmd" | sed -E "s/\"[^\"]*\"//g; s/'[^']*'//g")"
-printf '%s' "$unq" | grep -qE 'git\s+add\s+([^;&|]*\s)?(-A|--all|\.)([[:space:];&|]|$)' &&
-  block "bulk git add (stage files explicitly by path)"
-printf '%s' "$unq" | grep -qE 'git\s+commit\s+([^;&|]*\s)?(-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:];&|]|$)' &&
-  block "git commit -a (stage files explicitly by path)"
-printf '%s' "$unq" | grep -qE 'git\s+add\s+[^;&|]*\.db([[:space:];&|]|$)' &&
-  block "staging a .db file (runtime state never gets committed)"
+printf '%s' "$unq" | grep -qE 'git\s+add\s+([^;&|]*\s)?(-A|--all|\.)([[:space:];&|]|$)' \
+  && block "bulk git add (stage files explicitly by path)"
+printf '%s' "$unq" | grep -qE 'git\s+commit\s+([^;&|]*\s)?(-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:];&|]|$)' \
+  && block "git commit -a (stage files explicitly by path)"
+printf '%s' "$unq" | grep -qE 'git\s+add\s+[^;&|]*\.db([[:space:];&|]|$)' \
+  && block "staging a .db file (runtime state never gets committed)"
 if printf '%s' "$cmd" | grep -qE 'git\s+([^;&|]*\s)?commit'; then
   cwd="$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)"
-  git -C "${cwd:-.}" diff --cached --name-only 2>/dev/null | grep -qE '\.db$' &&
-    block "a .db file is staged (git restore --staged it)"
+  git -C "${cwd:-.}" diff --cached --name-only 2>/dev/null | grep -qE '\.db$' \
+    && block "a .db file is staged (git restore --staged it)"
 fi
 
 # Force-push, but allow the safe --force-with-lease variant.
 # (grep -E has no lookahead, so strip the safe form first, then test.)
 stripped="$(printf '%s' "$cmd" | sed 's/--force-with-lease[^ ]*//g')"
-printf '%s' "$stripped" | grep -qE 'git\s+push\s+[^;&|]*(--force|\s-f(\s|$))' &&
-  block "git push --force (use --force-with-lease instead)"
+printf '%s' "$stripped" | grep -qE 'git\s+push\s+[^;&|]*(--force|\s-f(\s|$))' \
+  && block "git push --force (use --force-with-lease instead)"
+
+# Agent hosts: never push to main/master, in any repo. Changes reach main only via a
+# reviewed PR. Hook-enforced only: GitHub Free cannot protect branches on private repos.
+if [ "workstation" = "agent" ] \
+   && printf '%s' "$cmd" | grep -qE 'git\s+([^;&|]*\s)?push|chezmoi\s+git\s+--\s+push'; then
+  printf '%s' "$cmd" | grep -qE 'push[^;&|]*[[:space:]:/](main|master)([[:space:];&|]|$)' \
+    && block "push to main/master from an agent host (open a PR instead)"
+  cwd="$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)"
+  cur="$(git -C "${cwd:-.}" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+  case "$cur" in
+    main|master) block "push while on $cur from an agent host (work on a branch)" ;;
+  esac
+fi
 
 exit 0
