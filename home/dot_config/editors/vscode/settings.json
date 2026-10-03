@@ -1,0 +1,65 @@
+{
+    "terminal.integrated.shell.osx": "/bin/zsh",
+    "terminal.integrated.inheritEnv": false,
+    "C_Cpp.updateChannel": "Insiders",
+    "debug.onTaskErrors": "debugAnyway",
+    "python.dataScience.sendSelectionToInteractiveWindow": false,
+    "python.dataScience.useDefaultConfigForJupyter": false,
+    "workbench.editorAssociations": {
+        "*.ipynb": "jupyter-notebook"
+    },
+    "notebook.cellToolbarLocation": {
+        "default": "right",
+        "jupyter-notebook": "left"
+    },
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnType": true
+    },
+    "latex-workshop.view.pdf.viewer": "tab",
+    "terminal.integrated.fontFamily": "MesloLGS NF",
+    "editor.formatOnSave": true,
+    "python.formatting.provider": "black",
+    "editor.formatOnPaste": true,
+    "jupyter.askForKernelRestart": false,
+    "git.autofetch": true,
+    "[cpp]": {
+        "editor.wordBasedSuggestions": "off",
+        "editor.suggest.insertMode": "replace",
+        "editor.semanticHighlighting.enabled": true,
+        "editor.quickSuggestions": {
+            "comments": "on",
+            "strings": "on",
+            "other": "on"
+        }
+    },
+    "arduino.useArduinoCli": true,
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "cmake.configureOnOpen": true,
+    "notebook.lineNumbers": "on",
+    "workbench.colorTheme": "Dark+",
+    "editor.inlineSuggest.enabled": true,
+    "go.toolsManagement.autoUpdate": true,
+    "leetcode.workspaceFolder": "/Users/dan/Desktop/leetcode",
+    "leetcode.filePath": {
+        "default": {
+            "folder": "",
+            "filename": "${id}.${kebab-case-name}.${ext}"
+        }
+    },
+    "leetcode.hint.commentDescription": false,
+    "explorer.confirmDragAndDrop": false,
+    "editor.unicodeHighlight.ambiguousCharacters": false,
+    "clangd.fallbackFlags": [
+        "--std=c++20"
+    ],
+    "explorer.confirmDelete": false,
+    "editor.stickyScroll.defaultModel": "indentationModel",
+    "editor.stickyScroll.maxLineCount": 10,
+    "clangd.detectExtensionConflicts": false,
+    "chat.viewSessions.orientation": "stacked",
+    "chat.tools.terminal.autoApprove": {
+        "./build/wins_core_tests": true
+    },
+    "claudeCode.preferredLocation": "panel"
+}

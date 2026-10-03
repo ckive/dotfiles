@@ -1,0 +1,12 @@
+# Debian/Ubuntu packages (one per line). Dev CLIs come from mise.
+build-essential
+ca-certificates
+curl
+git
+jq
+tmux
+tree
+unzip
+wget
+zsh
+btop

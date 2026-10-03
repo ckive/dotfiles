@@ -1,0 +1,2 @@
+# Every zsh, including non-interactive ones.
+[[ -r "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"

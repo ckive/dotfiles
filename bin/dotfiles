@@ -49,9 +49,23 @@ CAPTURE_DIRS = tuple(HOME / ".claude" / d for d in ("agents", "commands", "rules
 
 # chezmoi source-name attributes, stripped to turn a source path into a target path.
 SOURCE_PREFIXES = (
-    "after_", "before_", "create_", "empty_", "encrypted_", "exact_", "executable_",
-    "external_", "literal_", "modify_", "once_", "onchange_", "private_", "readonly_",
-    "remove_", "run_", "symlink_",
+    "after_",
+    "before_",
+    "create_",
+    "empty_",
+    "encrypted_",
+    "exact_",
+    "executable_",
+    "external_",
+    "literal_",
+    "modify_",
+    "once_",
+    "onchange_",
+    "private_",
+    "readonly_",
+    "remove_",
+    "run_",
+    "symlink_",
 )
 
 
@@ -60,7 +74,11 @@ SOURCE_PREFIXES = (
 
 def run(cmd: list[str], cwd: Path | None = None, check: bool = False, env: dict | None = None):
     return subprocess.run(
-        cmd, cwd=cwd, capture_output=True, text=True, check=check,
+        cmd,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=check,
         env={**os.environ, **(env or {})},
     )
 
@@ -104,7 +122,7 @@ def target_name(source_rel: str) -> str:
             changed = False
             for prefix in SOURCE_PREFIXES:
                 if part.startswith(prefix):
-                    part, changed = part[len(prefix):], True
+                    part, changed = part[len(prefix) :], True
         if part.startswith("dot_"):
             part = "." + part[4:]
         out.append(part.removesuffix(".tmpl"))
@@ -160,11 +178,19 @@ def instances(cfg: dict) -> list[Instance]:
     overlay = cfg.get("overlay")
     if overlay:
         cdir = CONFIG_HOME / "chezmoi"
-        result.append(Instance(overlay, [
-            "--config", str(cdir / f"{overlay}.toml"),
-            "--persistent-state", str(cdir / f"{overlay}-state.boltdb"),
-            "--cache", str(CACHE_HOME / f"chezmoi-{overlay}"),
-        ]))
+        result.append(
+            Instance(
+                overlay,
+                [
+                    "--config",
+                    str(cdir / f"{overlay}.toml"),
+                    "--persistent-state",
+                    str(cdir / f"{overlay}-state.boltdb"),
+                    "--cache",
+                    str(CACHE_HOME / f"chezmoi-{overlay}"),
+                ],
+            )
+        )
     result.append(Instance("base", []))
     return result
 
@@ -525,9 +551,9 @@ def _new_skills(managed: set[Path]) -> list[str]:
         if not d.is_dir():
             continue
         for p in d.iterdir():
-            if p.is_dir() and not p.is_symlink() and (p / "SKILL.md").exists():
-                if p not in managed and (p / "SKILL.md") not in managed:
-                    names.add(p.name)
+            is_skill = p.is_dir() and not p.is_symlink() and (p / "SKILL.md").exists()
+            if is_skill and p not in managed and (p / "SKILL.md") not in managed:
+                names.add(p.name)
     return sorted(names)
 
 
@@ -551,9 +577,7 @@ def _adopt_skill(overlay: Instance, name: str) -> None:
         rel = d.relative_to(HOME)
         src = source_home / source_dir_name(rel) / f"symlink_{name}.tmpl"
         src.parent.mkdir(parents=True, exist_ok=True)
-        src.write_text(
-            "{{ .chezmoi.homeDir }}/" + str(home.relative_to(HOME)) + "\n"
-        )
+        src.write_text("{{ .chezmoi.homeDir }}/" + str(home.relative_to(HOME)) + "\n")
         link = d / name
         if not link.exists() and not link.is_symlink():
             link.parent.mkdir(parents=True, exist_ok=True)
@@ -585,10 +609,13 @@ def do_sync(cfg: dict) -> None:
         write_json(CONFLICT, conflict)
         notify(f"Clash in {', '.join(conflict['targets'])}. Run: dotfiles resolve")
     weekly_drift(cfg)
-    write_json(LAST, {
-        "at": dt.datetime.now().isoformat(timespec="seconds"),
-        "warnings": _warnings,
-    })
+    write_json(
+        LAST,
+        {
+            "at": dt.datetime.now().isoformat(timespec="seconds"),
+            "warnings": _warnings,
+        },
+    )
 
 
 def cmd_sync(_args) -> int:

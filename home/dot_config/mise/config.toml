@@ -1,0 +1,20 @@
+# Runtimes and dev CLIs, the same on macOS, Linux and WSL. `mise install` after editing
+# (the sync runs it when this file changes). Python stays on uv.
+[tools]
+node = "lts"
+pnpm = "latest"
+uv = "latest"
+bat = "latest"
+fd = "latest"
+fzf = "latest"
+gh = "latest"
+just = "latest"
+lazygit = "latest"
+ripgrep = "latest"
+zoxide = "latest"
+shellcheck = "latest"
+shfmt = "latest"
+
+[settings]
+# Projects pin node/pnpm with .node-version / .nvmrc / packageManager (mise ignores volta).
+idiomatic_version_file_enable_tools = ["node", "pnpm"]

@@ -143,7 +143,7 @@ def test_resolve_merge_by_hand_opens_editor_then_finishes(world):
     editor.write_text(
         "#!/bin/sh\n"
         "grep -q '<<<<<<<' \"$1\" || exit 1\n"
-        "printf \"export EDITOR=nvim\\nalias gs='git status'\\n\" > \"$1\"\n"
+        'printf "export EDITOR=nvim\\nalias gs=\'git status\'\\n" > "$1"\n'
     )
     editor.chmod(0o755)
     mac.env["EDITOR"] = str(editor)

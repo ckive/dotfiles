@@ -1,0 +1,28 @@
+# Shared git defaults. Identity and signing come from the overlay (included last, so it wins).
+[alias]
+	s = status
+	d = diff
+	ds = diff --staged
+	co = checkout
+	br = branch
+	ci = commit
+	lg = log --oneline --graph --decorate -20
+	last = log -1 HEAD
+	unstage = reset HEAD --
+	amend = commit --amend --no-edit
+
+[core]
+	editor = nano
+	autocrlf = input
+
+[pull]
+	rebase = true
+
+[push]
+	default = current
+
+[init]
+	defaultBranch = main
+
+[include]
+	path = ~/.config/git/overlay.gitconfig

@@ -80,7 +80,9 @@
 # ---- OS-specific ----
 {{ if ne .chezmoi.os "darwin" }}
 Library
-.config/kitty
+{{ end }}
+{{ if eq .chezmoi.os "darwin" }}
+.config/Code
 {{ end }}
 {{ if ne .chezmoi.os "linux" }}
 .config/systemd

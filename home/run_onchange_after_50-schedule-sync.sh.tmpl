@@ -1,0 +1,29 @@
+#!/bin/bash
+# Schedule `dotfiles sync`. Reruns when the schedule files change:
+{{- if eq .chezmoi.os "darwin" }}
+# {{ include "Library/LaunchAgents/com.ckive.dotfiles-sync.plist.tmpl" | sha256sum }}
+{{- else }}
+# {{ include "dot_config/systemd/user/dotfiles-sync.service.tmpl" | sha256sum }} {{ include "dot_config/systemd/user/dotfiles-sync.timer" | sha256sum }}
+{{- end }}
+set -uo pipefail
+[ -n "${DOTFILES_SKIP_SCHEDULE:-}" ] && exit 0
+mkdir -p "$HOME/.local/state/dotfiles"
+{{ if eq .chezmoi.os "darwin" -}}
+plist="$HOME/Library/LaunchAgents/com.ckive.dotfiles-sync.plist"
+# Reloading the job from inside it would kill this very sync. Fail so chezmoi retries the
+# reload on the next sync started from a shell.
+if [ "${XPC_SERVICE_NAME:-}" = "com.ckive.dotfiles-sync" ]; then
+  echo "dotfiles: schedule changed; reload deferred to the next shell-started sync" >&2
+  exit 1
+fi
+launchctl bootout "gui/$(id -u)/com.ckive.dotfiles-sync" >/dev/null 2>&1 || true
+launchctl bootstrap "gui/$(id -u)" "$plist" || echo "dotfiles: could not load $plist" >&2
+{{- else -}}
+if systemctl --user show-environment >/dev/null 2>&1; then
+  systemctl --user daemon-reload
+  systemctl --user enable --now dotfiles-sync.timer
+else
+  echo "dotfiles: no systemd user session; syncing at shell start only" >&2
+fi
+{{- end }}
+exit 0

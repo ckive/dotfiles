@@ -1,0 +1,35 @@
+#!/bin/bash
+# Install OS packages. Reruns when a package list changes:
+# base: {{ include "../packages/Brewfile" | sha256sum }} {{ include "../packages/apt.txt" | sha256sum }}
+{{- $ov := get . "overlaySource" | default "" }}
+{{- $ovBrew := "" }}
+{{- if $ov }}{{ $ovBrew = joinPath $ov "packages/Brewfile" }}{{ end }}
+{{- if and $ovBrew (stat $ovBrew) }}
+# overlay: {{ include $ovBrew | sha256sum }}
+{{- end }}
+set -uo pipefail
+[ -n "${DOTFILES_SKIP_PACKAGES:-}" ] && exit 0
+{{ if eq .chezmoi.os "darwin" -}}
+if ! command -v brew >/dev/null 2>&1; then
+  echo "dotfiles: Homebrew is missing; run install.sh" >&2
+  exit 0
+fi
+for f in {{ joinPath .chezmoi.workingTree "packages/Brewfile" | quote }}{{ if and $ovBrew (stat $ovBrew) }} {{ $ovBrew | quote }}{{ end }}; do
+  brew bundle --no-upgrade --file="$f" || echo "dotfiles: some entries in $f failed; run: brew bundle --file=$f" >&2
+done
+{{- else if eq .chezmoi.os "linux" -}}
+command -v apt-get >/dev/null 2>&1 || exit 0
+missing=()
+while read -r pkg; do
+  dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "ok installed" || missing+=("$pkg")
+done < <(grep -vE '^[[:space:]]*(#|$)' {{ joinPath .chezmoi.workingTree "packages/apt.txt" | quote }})
+[ "${#missing[@]}" -eq 0 ] && exit 0
+if [ "$(id -u)" -eq 0 ]; then
+  apt-get install -y "${missing[@]}"
+elif sudo -n true 2>/dev/null; then
+  sudo apt-get install -y "${missing[@]}"
+else
+  echo "dotfiles: missing packages; run: sudo apt-get install ${missing[*]}" >&2
+fi
+{{- end }}
+exit 0

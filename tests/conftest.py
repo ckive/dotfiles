@@ -181,10 +181,12 @@ TEST_IGNORES = (
 BASE_SEED = {
     ".chezmoiroot": "home\n",
     "bin/dotfiles": DOTFILES.read_text(),
-    "claude/settings.json": json.dumps({
-        "enabledPlugins": {"context7@claude-plugins-official": True},
-        "permissions": {"allow": ["Bash(git status)"]},
-    }),
+    "claude/settings.json": json.dumps(
+        {
+            "enabledPlugins": {"context7@claude-plugins-official": True},
+            "permissions": {"allow": ["Bash(git status)"]},
+        }
+    ),
     "home/dot_claude/modify_settings.json.tmpl": (
         REPO / "home/dot_claude/modify_settings.json.tmpl"
     ).read_text(),

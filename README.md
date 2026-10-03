@@ -28,7 +28,7 @@ Then do the things that are deliberately **not** in git:
 
 1. `gh auth login` (lets the sync reach your private overlay)
 2. Create an ssh key for this machine and add it to GitHub/Forgejo (keys are per machine, never copied)
-3. Restore secrets (`~/.config/homelab/*.secret`) from your password manager
+3. Restore secrets (`~/.config/homelab/*.secret`) yourself. This repo never manages them
 4. Sign into apps; turn **off** VS Code/Cursor Settings Sync (this repo owns those settings)
 
 Lost or stolen machine: everything above is already on GitHub (at most ~5 minutes of edits are

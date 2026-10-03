@@ -1,0 +1,16 @@
+#!/bin/bash
+# Install missing VS Code extensions. Reruns when the list changes:
+# {{ include "../packages/vscode-extensions.txt" | sha256sum }}
+set -uo pipefail
+[ -n "${DOTFILES_SKIP_PACKAGES:-}" ] && exit 0
+code=$(command -v code || true)
+[ -z "$code" ] && [ -x "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" ] \
+  && code="/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"
+[ -n "$code" ] || exit 0
+installed=$("$code" --list-extensions 2>/dev/null | tr '[:upper:]' '[:lower:]')
+while read -r ext; do
+  [ -z "$ext" ] && continue
+  grep -qxi "$ext" <<<"$installed" || "$code" --install-extension "$ext" >/dev/null 2>&1 \
+    || echo "dotfiles: could not install VS Code extension $ext" >&2
+done < {{ joinPath .chezmoi.workingTree "packages/vscode-extensions.txt" | quote }}
+exit 0

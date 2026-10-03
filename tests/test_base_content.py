@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
 import pytest
-
 from conftest import REPO, run
 
 BIN = REPO / "home" / "dot_local" / "bin"
@@ -25,7 +25,7 @@ def fresh_home(tmp_path: Path):
         f'sourceDir = "{REPO}"\n[data]\n    overlaySource = "{overlay}"\n'
     )
     env = {
-        "PATH": subprocess.os.environ["PATH"],
+        "PATH": os.environ["PATH"],
         "HOME": str(home),
         "XDG_CONFIG_HOME": str(home / ".config"),
         "XDG_STATE_HOME": str(home / ".local" / "state"),
@@ -35,7 +35,8 @@ def fresh_home(tmp_path: Path):
     def apply():
         out = run(
             ["chezmoi", "apply", "--force", "--no-tty", "--exclude", "scripts,externals"],
-            env=env, check=False,
+            env=env,
+            check=False,
         )
         assert out.returncode == 0, out.stderr
         return out
@@ -97,56 +98,75 @@ def test_every_agent_reads_the_shared_standards(fresh_home):
 
 def guard(script: str, payload: dict) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["bash", str(BIN / script)], input=json.dumps(payload),
-        capture_output=True, text=True, timeout=30,
+        ["bash", str(BIN / script)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
 
 
-@pytest.mark.parametrize("command", [
-    "rm -rf build/",
-    "git add -A",
-    "git add .",
-    "git commit -a -m wip",
-    "git reset --hard HEAD~1",
-    "git push --force origin main",
-    "git clean -fd",
-])
+@pytest.mark.parametrize(
+    "command",
+    [
+        "rm -rf build/",
+        "git add -A",
+        "git add .",
+        "git commit -a -m wip",
+        "git reset --hard HEAD~1",
+        "git push --force origin main",
+        "git clean -fd",
+    ],
+)
 def test_guard_blocks_destructive_commands(command, tmp_path):
     """15. Destructive commands are blocked."""
-    result = guard("executable_claude-hook-guard-bash",
-                   {"tool_input": {"command": command}, "cwd": str(tmp_path)})
+    result = guard(
+        "executable_claude-hook-guard-bash",
+        {"tool_input": {"command": command}, "cwd": str(tmp_path)},
+    )
     assert result.returncode == 2
     assert "BLOCKED" in result.stderr
 
 
-@pytest.mark.parametrize("command", [
-    "git push --force-with-lease origin feature",
-    "git add src/main.py",
-    'git commit -m "fix: handle git add -A in docs"',
-    "rm notes.txt",
-])
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git push --force-with-lease origin feature",
+        "git add src/main.py",
+        'git commit -m "fix: handle git add -A in docs"',
+        "rm notes.txt",
+    ],
+)
 def test_guard_allows_safe_variants(command, tmp_path):
     """15b. ...but their safe variants run normally."""
-    result = guard("executable_claude-hook-guard-bash",
-                   {"tool_input": {"command": command}, "cwd": str(tmp_path)})
+    result = guard(
+        "executable_claude-hook-guard-bash",
+        {"tool_input": {"command": command}, "cwd": str(tmp_path)},
+    )
     assert result.returncode == 0, result.stderr
 
 
 def test_guard_blocks_token_written_into_tracked_config(tmp_path):
     """16. Secrets can't be written into config."""
     token = "ghp_" + "a" * 36
-    result = guard("executable_claude-hook-guard-edit", {
-        "tool_input": {
-            "file_path": "/Users/x/.claude/settings.json",
-            "content": json.dumps({"env": {"GITHUB_TOKEN": token}}),
+    result = guard(
+        "executable_claude-hook-guard-edit",
+        {
+            "tool_input": {
+                "file_path": "/Users/x/.claude/settings.json",
+                "content": json.dumps({"env": {"GITHUB_TOKEN": token}}),
+            },
         },
-    })
+    )
     assert result.returncode == 2
     assert "credential" in result.stderr
 
 
 def test_guard_allows_ordinary_config_edit():
-    result = guard("executable_claude-hook-guard-edit", {
-        "tool_input": {"file_path": "/Users/x/.claude/settings.json", "content": '{"a": 1}'},
-    })
+    result = guard(
+        "executable_claude-hook-guard-edit",
+        {
+            "tool_input": {"file_path": "/Users/x/.claude/settings.json", "content": '{"a": 1}'},
+        },
+    )
     assert result.returncode == 0

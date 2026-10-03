@@ -17,7 +17,7 @@ content="$(printf '%s' "$payload" | jq -r '.tool_input.content // .tool_input.ne
 
 case "$file" in
   */.claude/* | */.codex/* | */.gemini/* | */.agents/* | */.config/* | */dotfiles*/* | \
-  */.zshrc | */.zprofile | */.zshenv | */.bashrc | */.gitconfig | */.claude.json)
+    */.zshrc | */.zprofile | */.zshenv | */.bashrc | */.gitconfig | */.claude.json)
     if printf '%s' "$content" | grep -qE 'sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|gh[ousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[abposr]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----'; then
       echo "BLOCKED by guard-edit: content looks like a live credential." >&2
       echo "File: $file" >&2

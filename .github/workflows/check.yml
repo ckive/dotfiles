@@ -1,0 +1,33 @@
+name: check
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - uses: extractions/setup-just@v3
+      - run: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b /usr/local/bin
+      - run: just setup && just check
+
+  fresh-debian:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: extractions/setup-just@v3
+      - run: just e2e
+
+  fresh-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: install.sh from this checkout
+        env:
+          DOTFILES_MODE: pull
+          DOTFILES_OVERLAY: none
+          DOTFILES_SKIP_SCHEDULE: "1"
+          DOTFILES_SKIP_MACOS: "1"
+          DOTFILES_SKIP_PACKAGES: "1"
+        run: sh install.sh
+      - run: test -L ~/.claude/skills/rmsesh && test -f ~/.oh-my-zsh/oh-my-zsh.sh && test -L ~/.local/bin/dotfiles

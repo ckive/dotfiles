@@ -1,0 +1,51 @@
+# Powerlevel10k instant prompt. Keep near the top; anything that prompts must go above it.
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+# oh-my-zsh, powerlevel10k and the two plugins below are fetched by chezmoi
+# (home/.chezmoiexternal.toml), so a new machine gets them on first apply.
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="powerlevel10k/powerlevel10k"
+plugins=(git fzf zoxide zsh-autosuggestions zsh-syntax-highlighting)
+[[ -r $ZSH/oh-my-zsh.sh ]] && source $ZSH/oh-my-zsh.sh
+[[ -r ~/.p10k.zsh ]] && source ~/.p10k.zsh
+
+typeset -U path
+path=("$HOME/.local/bin" $path)
+
+# Dev tools and runtimes (node, pnpm, CLIs) come from mise: ~/.config/mise/config.toml
+(( $+commands[mise] )) && eval "$(mise activate zsh)"
+
+# Python: uv only. `uv run` needs no activation; this hook just makes bare `python`/`pytest`
+# work inside a project. precmd, not chpwd, so a new tab that starts in the project works too.
+_uv_venv_auto() {
+  local d="$PWD" found=""
+  while true; do
+    [[ -f "$d/.venv/bin/activate" ]] && { found="$d/.venv"; break; }
+    [[ -z "$d" || "$d" == "/" ]] && break
+    d="${d:h}"
+  done
+  if [[ -n "$found" ]]; then
+    [[ "$VIRTUAL_ENV" != "$found" ]] && source "$found/bin/activate"
+  elif [[ -n "$VIRTUAL_ENV" ]] && (( $+functions[deactivate] )); then
+    deactivate
+  fi
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd _uv_venv_auto
+
+[[ -r ~/.config/shell/common.sh ]] && source ~/.config/shell/common.sh
+
+# Machine- and overlay-specific additions (personal PATHs, work proxies, ...).
+for f in ~/.config/zsh/conf.d/*.zsh(N); do source "$f"; done
+unset f
+
+# dotfiles: say when a clash needs a decision, and sync in the background at most every 5 min.
+if [[ -o interactive ]] && (( $+commands[dotfiles] )); then
+  _df_state="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles"
+  [[ -f $_df_state/conflict.json ]] && print -P "%F{yellow}dotfiles: clash pending, run: dotfiles resolve%f"
+  _df_recent=($_df_state/last.json(N.mm-5))
+  (( ${#_df_recent} )) || (dotfiles sync >/dev/null 2>&1 &)
+  unset _df_state _df_recent
+fi

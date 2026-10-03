@@ -1,0 +1,26 @@
+{{- if eq .chezmoi.os "darwin" -}}
+#!/bin/bash
+# macOS preferences. Reruns when this file or the Rectangle export changes:
+# {{ include "../macos/rectangle.plist" | sha256sum }}
+# To capture a new preference: `defaults read <domain> <key>`, then add it below.
+set -uo pipefail
+[ -n "${DOTFILES_SKIP_MACOS:-}" ] && exit 0
+
+defaults write com.apple.dock autohide -bool false
+defaults write com.apple.dock tilesize -int 91
+defaults write com.apple.dock show-recents -bool false
+defaults write com.apple.dock mru-spaces -bool false
+defaults write com.apple.finder ShowPathbar -bool true
+defaults write com.apple.finder FXPreferredViewStyle -string icnv
+defaults write NSGlobalDomain KeyRepeat -int 2
+defaults write NSGlobalDomain InitialKeyRepeat -int 15
+defaults write NSGlobalDomain AppleInterfaceStyle -string Dark
+defaults write NSGlobalDomain NSAutomaticSpellingCorrectionEnabled -bool false
+defaults write NSGlobalDomain com.apple.swipescrolldirection -bool false
+defaults write com.apple.AppleMultitouchTrackpad Clicking -bool true
+defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool true
+
+defaults import com.knollsoft.Rectangle {{ joinPath .chezmoi.workingTree "macos/rectangle.plist" | quote }}
+
+killall Dock Finder >/dev/null 2>&1 || true
+{{- end }}

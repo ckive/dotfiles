@@ -19,15 +19,17 @@ def install_plugin_with_slash_plugin(machine) -> None:
     machine.write(".claude/settings.json", json.dumps(s, indent=2))
     machine.write(
         ".claude/plugins/known_marketplaces.json",
-        json.dumps({
-            MARKETPLACE: {
-                "source": {"source": "github", "repo": "mattpocock/skills"},
-                "installLocation": str(machine.path(".claude/plugins/marketplaces/mattpocock")),
-            },
-            "claude-plugins-official": {
-                "source": {"source": "github", "repo": "anthropics/claude-plugins-official"},
-            },
-        }),
+        json.dumps(
+            {
+                MARKETPLACE: {
+                    "source": {"source": "github", "repo": "mattpocock/skills"},
+                    "installLocation": str(machine.path(".claude/plugins/marketplaces/mattpocock")),
+                },
+                "claude-plugins-official": {
+                    "source": {"source": "github", "repo": "anthropics/claude-plugins-official"},
+                },
+            }
+        ),
     )
 
 
@@ -85,7 +87,7 @@ def test_runtime_settings_written_by_claude_are_kept(world):
 def add_mcp_server(machine, name: str, server: dict) -> None:
     """What `claude mcp add -s user` writes into ~/.claude.json."""
     path = machine.path(".claude.json")
-    data = json.loads(path.read_text()) if path.exists() else {"numStartups": 3}
+    data: dict = json.loads(path.read_text()) if path.exists() else {"numStartups": 3}
     data.setdefault("mcpServers", {})[name] = server
     path.write_text(json.dumps(data))
 
@@ -181,10 +183,14 @@ def test_overlay_settings_are_added_to_base_claude_settings(world):
     mac = world.machine("macbook")
     fragment = mac.overlay_src / "claude" / "settings.json"
     fragment.parent.mkdir(parents=True, exist_ok=True)
-    fragment.write_text(json.dumps({
-        "enabledPlugins": {"ansible-docs@claude-ansible-skills": True},
-        "permissions": {"allow": ["Bash(ansible *)"]},
-    }))
+    fragment.write_text(
+        json.dumps(
+            {
+                "enabledPlugins": {"ansible-docs@claude-ansible-skills": True},
+                "permissions": {"allow": ["Bash(ansible *)"]},
+            }
+        )
+    )
 
     # When chezmoi applies (via sync)
     mac.sync()

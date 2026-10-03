@@ -1,0 +1,8 @@
+# Linux bash (servers, agent users). Interactive only.
+[[ $- != *i* ]] && return
+[ -f /etc/bash.bashrc ] && . /etc/bash.bashrc
+export PATH="$HOME/.local/bin:$PATH"
+command -v mise >/dev/null 2>&1 && eval "$(mise activate bash)"
+[ -r ~/.config/shell/common.sh ] && . ~/.config/shell/common.sh
+for f in ~/.config/bash/conf.d/*.sh; do [ -r "$f" ] && . "$f"; done
+unset f

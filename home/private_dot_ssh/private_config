@@ -1,0 +1,7 @@
+# Hosts live in ~/.ssh/config.d/*.conf (from the overlay). Keys are per machine, never synced.
+Include config.d/*.conf
+
+Host *
+  IgnoreUnknown UseKeychain
+  AddKeysToAgent yes
+  UseKeychain yes
