@@ -55,10 +55,6 @@ export PATH="/Users/dan/.antigravity/antigravity/bin:$PATH"
 # Shared config (aliases, lllm switcher, claude wrapper)
 [ -f "$HOME/.config/shell/common.sh" ] && source "$HOME/.config/shell/common.sh"
 
-# CLAUDE CODE
-# equiv of DISABLE_AUTOUPDATER, DISABLE_FEEDBACK_COMMAND, DISABLE_ERROR_REPORTING, and DISABLE_TELEMETRY
-export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
-
 # pnpm
 export PNPM_HOME="/Users/dan/Library/pnpm"
 case ":$PATH:" in
