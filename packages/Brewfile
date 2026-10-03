@@ -3,7 +3,6 @@
 # Apps already in /Applications (installed by hand) are skipped instead of reinstalled.
 def installed?(app) = File.exist?("/Applications/#{app}.app")
 
-tap "automic-vault/isotopes"
 brew "jq"
 brew "btop"
 brew "coreutils"
@@ -25,12 +24,10 @@ brew "tree"
 brew "vcpkg"
 brew "wakeonlan"
 brew "wget"
-cask "automic-vault/isotopes/automic-vault", trusted: true
 cask "betterdisplay"
 cask "db-browser-for-sqlite"
 cask "docker-desktop"
 cask "monitorcontrol"
-cask "opensuperwhisper"
 cask "vorssaint"
 cask "alacritty" unless installed?("Alacritty")
 cask "chatgpt" unless installed?("ChatGPT")
