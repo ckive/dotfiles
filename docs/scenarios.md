@@ -23,6 +23,20 @@ whenever a shell starts.
 - **When** the sync runs
 - **Then** your edit is pushed and copied to `~/.zshrc`. The old copy in `~` does not overwrite it.
 
+### 1d. Stray files in the repo stay local
+`test_stray_file_dropped_in_the_repo_is_not_published`
+- **Given** a tool saved its report into the repo folder, e.g. `rmlint.json`
+- **When** the sync runs
+- **Then** it is not pushed. The sync only publishes config: `home/`, `packages/`, `claude/`,
+  `macos/` and `drift-ignore`.
+
+### 1e. Unfinished code edits are neither published nor lost
+`test_unfinished_code_edit_in_the_repo_survives_incoming_changes`
+- **Given** you are halfway through editing `bin/dotfiles`, and another machine pushed a change
+- **When** the sync runs
+- **Then** the other machine's change arrives, your edit is untouched, and it isn't pushed.
+  Code changes are yours to commit.
+
 ### 2. Changes made on another machine arrive here
 `test_sync_brings_in_changes_pushed_from_another_machine`
 - **Given** the homelab box pushed a new alias in `~/.gitconfig`
@@ -100,9 +114,17 @@ whenever a shell starts.
 
 ### 11. Spotting config that isn't tracked
 `test_drift_lists_untracked_config_and_skips_junk`
-- **Given** a newly installed tool created `~/.config/newtool/config.toml`
+- **Given** a newly installed tool created `~/.config/newtool/config.toml`, next to `~/Music`,
+  shell history, SSH keys, caches and empty folders
 - **When** you run `dotfiles drift` (it also runs weekly and notifies you)
-- **Then** that file is listed as untracked. Caches, history and `~/.claude/projects/` are not.
+- **Then** only `.config/newtool` is listed
+
+### 11b. Telling drift a path isn't worth tracking
+`test_drift_ignore_hides_a_path_on_every_machine`
+- **Given** drift lists `.config/newtool` and you don't want it tracked
+- **When** you run `dotfiles drift --ignore .config/newtool`
+- **Then** drift stops listing it, on every machine: the path is saved in the private repo's
+  `drift-ignore`. Generic patterns (history, caches, keys) are in the public `drift-ignore`.
 
 ## Settings files built from public and private parts
 

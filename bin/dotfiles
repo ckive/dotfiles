@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fnmatch
 import json
 import os
 import shutil
@@ -458,8 +459,20 @@ def apply_mcp(cfg: dict) -> None:
 # ---------------------------------------------------------------- sync
 
 
+# What the sync publishes from a repo: config, not code or stray files. Edits to bin/, tests/
+# or docs/ are yours to commit; tool output dropped in the repo (rmlint.json) stays local.
+SYNC_PATHS = ("home", "packages", "claude", "macos", "drift-ignore")
+
+
 def commit_all(inst: Instance, who: str, message: str | None = None) -> None:
-    inst.git("add", "--all")
+    tracked = set(inst.git("ls-files").stdout.splitlines())
+    paths = [
+        p
+        for p in SYNC_PATHS
+        if (inst.repo / p).exists() or any(t == p or t.startswith(p + "/") for t in tracked)
+    ]
+    if paths:
+        inst.git("add", "--all", "--", *paths)
     staged = inst.git("diff", "--cached", "--name-only").stdout.split()
     if not staged:
         return
@@ -512,7 +525,7 @@ def sync_repo(inst: Instance, cfg: dict, first: bool = False) -> dict | None:
             inst.git("reset", "-q", "--hard", "@{u}")
         return None
     if behind and ahead:
-        if inst.git("rebase", "-q", "@{u}").returncode != 0:
+        if inst.git("rebase", "-q", "--autostash", "@{u}").returncode != 0:
             files = inst.git("diff", "--name-only", "--diff-filter=U").stdout.split()
             inst.git("rebase", "--abort")
             return {
@@ -522,7 +535,7 @@ def sync_repo(inst: Instance, cfg: dict, first: bool = False) -> dict | None:
                 "at": dt.datetime.now().isoformat(timespec="seconds"),
             }
     elif behind:
-        inst.git("merge", "-q", "--ff-only", "@{u}")
+        inst.git("merge", "-q", "--ff-only", "--autostash", "@{u}")
     if ahead_behind(inst)[0] and inst.git("push", "-q").returncode != 0:
         add_warning(f"{inst.name}: push failed; will retry")
     return None
@@ -676,14 +689,47 @@ def cmd_promote(args) -> int:
     return 0
 
 
+def drift_ignores(cfg: dict) -> list[str]:
+    """Globs from drift-ignore in each repo: generic ones in the base, yours in the overlay."""
+    globs = []
+    for inst in instances(cfg):
+        f = inst.repo / "drift-ignore"
+        if f.exists():
+            lines = (line.strip() for line in f.read_text().splitlines())
+            globs += [line.rstrip("/") for line in lines if line and not line.startswith("#")]
+    return globs
+
+
 def drift(cfg: dict) -> list[str]:
-    """Paths under $HOME that no instance manages or ignores."""
+    """Config under $HOME that no instance manages, ignores or lists in drift-ignore.
+
+    Only dot-paths count: ~/Music or ~/Desktop hold your files, not config. Empty
+    directories are skipped too.
+    """
     sets = []
     for inst in instances(cfg):
         out = inst.chezmoi("unmanaged", "--path-style", "absolute", str(HOME))
         sets.append({Path(p) for p in out.stdout.splitlines() if p})
     common = set.intersection(*sets) if sets else set()
-    return sorted(str(p.relative_to(HOME)) for p in common if p.is_relative_to(HOME))
+    globs = drift_ignores(cfg)
+
+    def ignored(rel: str) -> bool:
+        return any(fnmatch.fnmatch(rel, g) or rel.startswith(g + "/") for g in globs)
+
+    found = []
+    for p in common:
+        if not p.is_relative_to(HOME):
+            continue
+        rel = str(p.relative_to(HOME))
+        if not rel.startswith(".") or ignored(rel):
+            continue
+        if p.is_dir():
+            # A folder counts only if it holds a file that isn't ignored (keys in ~/.ssh are).
+            files = (f for f in p.rglob("*") if f.is_file())
+            if all(ignored(str(f.relative_to(HOME))) for f in files):
+                continue
+        found.append(rel)
+    return sorted(found)
 
 
 def weekly_drift(cfg: dict) -> None:
@@ -697,8 +743,18 @@ def weekly_drift(cfg: dict) -> None:
         notify(f"{len(found)} untracked config paths. Run: dotfiles drift")
 
 
-def cmd_drift(_args) -> int:
-    for p in drift(load_config()):
+def cmd_drift(args) -> int:
+    cfg = load_config()
+    if args.ignore:
+        target = Path(args.ignore).expanduser()
+        rel = str(target.relative_to(HOME)) if target.is_absolute() else args.ignore
+        f = instances(cfg)[0].repo / "drift-ignore"
+        text = f.read_text() if f.exists() else ""
+        if rel not in text.splitlines():
+            f.write_text(text + ("" if not text or text.endswith("\n") else "\n") + rel + "\n")
+        print(f"dotfiles: drift will skip {rel} (saved in {f}, synced to your machines)")
+        return 0
+    for p in drift(cfg):
         print(p)
     return 0
 
@@ -776,7 +832,7 @@ def cmd_resolve(args) -> int:
 
 def _merge_by_hand(inst: Instance) -> bool:
     editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
-    if inst.git("rebase", "-q", "@{u}").returncode == 0:
+    if inst.git("rebase", "-q", "--autostash", "@{u}").returncode == 0:
         return True
     while True:
         files = inst.git("diff", "--name-only", "--diff-filter=U").stdout.split()
@@ -808,7 +864,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("--choice", choices=["mine", "theirs", "merge"])
     p = sub.add_parser("promote", help="move a file or skill from the private overlay to the base")
     p.add_argument("path")
-    sub.add_parser("drift", help="list config under $HOME that nothing tracks or ignores")
+    p = sub.add_parser("drift", help="list config under $HOME that nothing tracks or ignores")
+    p.add_argument("--ignore", metavar="PATH", help="never list PATH again (saved and synced)")
     p = sub.add_parser("ov", help="run chezmoi against the overlay, e.g. dotfiles ov add <path>")
     p.add_argument("chezmoi_args", nargs=argparse.REMAINDER)
     sub.add_parser("render-claude-settings", help=argparse.SUPPRESS)

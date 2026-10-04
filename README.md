@@ -45,7 +45,7 @@ picks them up. There's nothing to run.
 | Sync right now | `dotfiles sync` |
 | Fix a clash (you'll be told) | `dotfiles resolve` and pick: keep mine / take theirs / merge by hand |
 | Share a private skill or file with every machine, publicly | `dotfiles promote <path>` |
-| Find config that isn't tracked yet | `dotfiles drift` |
+| Find config that isn't tracked yet | `dotfiles drift`. Track it with `chezmoi add`, or hide it with `dotfiles drift --ignore <path>` |
 | Track a new file | `chezmoi add <path>` (public) or `dotfiles ov add <path>` (private) |
 | Stop tracking a file | `chezmoi forget <path>` (or `dotfiles ov forget`) |
 | Change a package list | edit `Brewfile` / `packages-apt.txt` / `~/.config/mise/config.toml`. Installs on next sync |

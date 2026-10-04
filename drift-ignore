@@ -1,0 +1,55 @@
+# Paths `dotfiles drift` never lists: history, caches, keys and app state that isn't config.
+# One glob per line, relative to $HOME. Your own go in the overlay's drift-ignore;
+# `dotfiles drift --ignore <path>` adds them there.
+
+# macOS
+.CFUserTextEncoding
+.DS_Store
+.Trash
+
+# shell and REPL history
+.bash_history
+.bash_sessions
+.lesshst
+.node_repl_history
+.python_history
+.viminfo
+.wget-hsts
+.zcompdump*
+.zsh_history
+.zsh_sessions
+
+# keys and credentials (out of scope for dotfiles)
+.gnupg
+.ssh/*.pub
+.ssh/id_*
+.ssh/*_ed25519
+.ssh/*_rsa
+.ssh/known_hosts*
+
+# caches and tool state
+.cache
+.local/share
+.local/state
+.docker
+.matplotlib
+.npm
+.pnpm-state
+.yarn
+.vcpkg
+.vscode
+.vscode-oss
+.vscode-shared
+.config/chezmoi
+.config/dotfiles
+.ansible
+.copilot
+.gk
+.homebrew
+.ipython/profile_*/history.sqlite
+.ipython/profile_*/startup/README
+.megaCmd
+.openjfx
+.config/gtk-2.0
+.config/uv/uv-receipt.json
+.config/wireshark/recent*
