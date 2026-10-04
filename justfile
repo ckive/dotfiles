@@ -1,6 +1,6 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-shell_scripts := "install.sh home/dot_bashrc tests/e2e-checks.sh home/dot_local/bin/executable_claude-hook-guard-bash home/dot_local/bin/executable_claude-hook-guard-edit home/dot_local/bin/executable_claude-notify"
+shell_scripts := "install.sh home/dot_bashrc tests/e2e-checks.sh home/dot_local/bin/executable_claude-hook-guard-bash home/dot_local/bin/executable_claude-hook-guard-edit home/dot_local/bin/executable_claude-notify home/dot_local/bin/executable_cc-v"
 
 default: check
 
