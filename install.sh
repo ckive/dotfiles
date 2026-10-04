@@ -70,8 +70,8 @@ else
   }
 fi
 
-# ---- 2b. Linux (incl. WSL): the apt list, and zsh as login shell ----
-# Done here, not by the background sync: both can need your password.
+# ---- 2b. Linux (incl. WSL): the apt list ----
+# Done here, not by the background sync: apt needs your password.
 if [ "$os" = Linux ] && command -v apt-get >/dev/null 2>&1 && [ -z "${DOTFILES_SKIP_PACKAGES:-}" ]; then
   need=""
   while read -r p _; do
@@ -83,15 +83,6 @@ if [ "$os" = Linux ] && command -v apt-get >/dev/null 2>&1 && [ -z "${DOTFILES_S
     # shellcheck disable=SC2086 # $need is a word list
     { $sudo apt-get update -q && $sudo apt-get install -yq $need; } ||
       say "some packages failed; run: sudo apt-get install$need"
-  fi
-fi
-if [ "$os" = Linux ] && interactive && [ -z "${CODESPACES:-}${REMOTE_CONTAINERS:-}" ]; then
-  zsh_path="$(command -v zsh || true)"
-  login_shell="$(getent passwd "$(id -un)" | cut -d: -f7)"
-  if [ -n "$zsh_path" ] && [ "$login_shell" != "$zsh_path" ]; then
-    if [ "$(ask "Make zsh your login shell (prompt, aliases, shell-start sync)? y/n" y)" = y ]; then
-      chsh -s "$zsh_path" </dev/tty || say "could not change shell; run: chsh -s $zsh_path"
-    fi
   fi
 fi
 
