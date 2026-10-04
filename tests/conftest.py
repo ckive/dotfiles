@@ -197,6 +197,7 @@ BASE_SEED = {
     "home/dot_gitconfig": "[alias]\n\tst = status\n",
     "home/dot_config/agents/standards.md": "# Standards\n\n- be concise\n",
     "home/.chezmoiignore": TEST_IGNORES,
+    "drift-ignore": (REPO / "drift-ignore").read_text(),
 }
 
 OVERLAY_SEED = {

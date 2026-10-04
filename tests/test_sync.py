@@ -61,6 +61,39 @@ def test_first_sync_on_a_used_machine_installs_repo_versions(world):
     assert "alias later=1" in world.base.show("home/dot_zshrc")
 
 
+def test_stray_file_dropped_in_the_repo_is_not_published(world):
+    """1d. Tool output saved in the repo folder (e.g. rmlint.json) stays local."""
+    # Given a tool wrote its report into the repo folder, outside the config folders
+    mac = world.machine("macbook")
+    (mac.base_src / "rmlint.json").write_text("[]\n")
+
+    # When the sync runs
+    mac.sync()
+
+    # Then the report is not on GitHub
+    assert "rmlint.json" not in world.base.files()
+
+
+def test_unfinished_code_edit_in_the_repo_survives_incoming_changes(world):
+    """1e. Half-edited repo code (bin/dotfiles) is neither published nor lost on pull."""
+    # Given you are mid-edit on the sync script, and another machine pushed a change
+    mac = world.machine("macbook")
+    lab = world.machine("homelab")
+    lab.write(".zshrc", lab.read(".zshrc") + "alias from_lab=1\n")
+    lab.sync()
+    script = mac.base_src / "bin" / "dotfiles"
+    script.write_text(script.read_text() + "# work in progress\n")
+
+    # When the Mac syncs
+    mac.sync()
+
+    # Then the other machine's change arrives, your edit is still there, and it wasn't pushed
+    assert "alias from_lab=1" in mac.read(".zshrc")
+    assert script.read_text().endswith("# work in progress\n")
+    assert "work in progress" not in world.base.show("bin/dotfiles")
+    assert mac.dotfiles("status").returncode == 0
+
+
 def test_sync_brings_in_changes_pushed_from_another_machine(world):
     """2. Changes made on another machine arrive here, without a commit from this one."""
     # Given the homelab box pushed a new git alias

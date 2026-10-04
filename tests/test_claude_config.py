@@ -162,19 +162,39 @@ def test_promote_moves_file_from_overlay_to_base(world):
 
 
 def test_drift_lists_untracked_config_and_skips_junk(world):
-    """11. Spotting config that isn't tracked."""
+    """11. Spotting config that isn't tracked: only config, not folders, history, keys or caches."""
+    # Given a new tool wrote its config, next to the usual non-config clutter in $HOME
     mac = world.machine("macbook")
     mac.write(".config/newtool/config.toml", "x = 1\n")
-    mac.write(".cache/thing/blob", "x")
+    mac.write("Music/song.mp3", "x")
     mac.write(".zsh_history", "ls\n")
+    mac.write(".ssh/id_ed25519", "key")
+    mac.write(".cache/thing/blob", "x")
     mac.write(".claude/projects/abc/session.jsonl", "{}")
+    mac.path(".claude/rules").mkdir(parents=True, exist_ok=True)
 
+    # When you run drift
     result = mac.dotfiles("drift")
 
+    # Then only the new tool's config is listed
     assert result.returncode == 0, result.stderr
-    assert ".config/newtool" in result.stdout
-    for junk in (".cache", ".zsh_history", ".claude/projects", ".config/zsh"):
-        assert junk not in result.stdout
+    assert result.stdout.split() == [".config/newtool"]
+
+
+def test_drift_ignore_hides_a_path_on_every_machine(world):
+    """11b. Telling drift a path isn't worth tracking."""
+    # Given drift lists a tool's config you don't want tracked
+    mac = world.machine("macbook")
+    mac.write(".config/newtool/config.toml", "x = 1\n")
+
+    # When you ignore it and the sync runs
+    result = mac.dotfiles("drift", "--ignore", ".config/newtool")
+    mac.sync()
+
+    # Then drift no longer lists it, and the choice is saved in the private repo
+    assert result.returncode == 0, result.stderr
+    assert ".config/newtool" not in mac.dotfiles("drift").stdout
+    assert ".config/newtool" in world.overlay.show("drift-ignore")
 
 
 def test_overlay_settings_are_added_to_base_claude_settings(world):
