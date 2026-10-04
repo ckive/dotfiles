@@ -1,0 +1,98 @@
+[
+{
+  "description": "rmlint json-dump of lint files",
+  "cwd": "/Users/dan/Desktop/projects/dotfiles/",
+  "args": "rmlint",
+  "version": "2.10.2",
+  "rev": "unknown",
+  "progress": 0,
+  "checksum_type": "blake2b",
+  "merge_directories": false
+}, {
+  "id": 4004582959,
+  "type": "duplicate_file",
+  "progress": 99,
+  "checksum": "917c333877c6aeb09b793feb6080ce203d7fd8f2d9bcb183f29769855fce386c485a3864cf4e50edf4a87aaa2c403998301e8a9a665e052ce5af454bcb554af9",
+  "path": "/Users/dan/Desktop/projects/dotfiles/home/dot_claude/skills/symlink_rmsesh.tmpl",
+  "size": 52,
+  "depth": 4,
+  "inode": 108314501,
+  "disk_id": 16777233,
+  "is_original": true,
+  "twins": 2,
+  "mtime": 1791068578.8220901
+}, {
+  "id": 3373006249,
+  "type": "duplicate_file",
+  "progress": 100,
+  "checksum": "917c333877c6aeb09b793feb6080ce203d7fd8f2d9bcb183f29769855fce386c485a3864cf4e50edf4a87aaa2c403998301e8a9a665e052ce5af454bcb554af9",
+  "path": "/Users/dan/Desktop/projects/dotfiles/home/dot_agents/skills/symlink_rmsesh.tmpl",
+  "size": 52,
+  "depth": 4,
+  "inode": 108314502,
+  "disk_id": 16777233,
+  "is_original": false,
+  "twins": 2,
+  "mtime": 1791068578.8221676
+}, {
+  "id": 1432791761,
+  "type": "duplicate_file",
+  "progress": 100,
+  "checksum": "28151150b317e7db47ea140c3e140e0fee5cf9028909d6c3370aa3a20a0398773072f97398bc6385129b6552424a93bf1e06932c168d23e97f32b73dec057a7c",
+  "path": "/Users/dan/Desktop/projects/dotfiles/home/dot_claude/skills/symlink_strip-claude-attribution.tmpl",
+  "size": 70,
+  "depth": 4,
+  "inode": 108314503,
+  "disk_id": 16777233,
+  "is_original": true,
+  "twins": 2,
+  "mtime": 1791068578.8222435
+}, {
+  "id": 3695878908,
+  "type": "duplicate_file",
+  "progress": 100,
+  "checksum": "28151150b317e7db47ea140c3e140e0fee5cf9028909d6c3370aa3a20a0398773072f97398bc6385129b6552424a93bf1e06932c168d23e97f32b73dec057a7c",
+  "path": "/Users/dan/Desktop/projects/dotfiles/home/dot_agents/skills/symlink_strip-claude-attribution.tmpl",
+  "size": 70,
+  "depth": 4,
+  "inode": 108314504,
+  "disk_id": 16777233,
+  "is_original": false,
+  "twins": 2,
+  "mtime": 1791068578.8223219
+}, {
+  "id": 530369463,
+  "type": "duplicate_file",
+  "progress": 100,
+  "checksum": "147b0a0c8381f44aac30f61f7d87712e1504730c8d8cf6cbdd4ed973cc6fcb39e14df4de75730c8d641049168ce0c904975f6e38e009e91382e04b5fb2a86d5b",
+  "path": "/Users/dan/Desktop/projects/dotfiles/home/Library/Application Support/Code/User/symlink_settings.json.tmpl",
+  "size": 60,
+  "depth": 6,
+  "inode": 108322138,
+  "disk_id": 16777233,
+  "is_original": true,
+  "twins": 2,
+  "mtime": 1791068720.1053679
+}, {
+  "id": 1210092795,
+  "type": "duplicate_file",
+  "progress": 100,
+  "checksum": "147b0a0c8381f44aac30f61f7d87712e1504730c8d8cf6cbdd4ed973cc6fcb39e14df4de75730c8d641049168ce0c904975f6e38e009e91382e04b5fb2a86d5b",
+  "path": "/Users/dan/Desktop/projects/dotfiles/home/dot_config/Code/User/symlink_settings.json.tmpl",
+  "size": 60,
+  "depth": 5,
+  "inode": 108322139,
+  "disk_id": 16777233,
+  "is_original": false,
+  "twins": 2,
+  "mtime": 1791068720.1072986
+}, {
+  "aborted": false,
+  "progress": 100,
+  "total_files": 74,
+  "ignored_files": 15,
+  "ignored_folders": 6,
+  "duplicates": 3,
+  "duplicate_sets": 3,
+  "total_lint_size": 182
+}]
