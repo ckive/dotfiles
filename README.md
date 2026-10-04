@@ -48,10 +48,25 @@ picks them up. There's nothing to run.
 | Find config that isn't tracked yet | `dotfiles drift`. Track it with `chezmoi add`, or hide it with `dotfiles drift --ignore <path>` |
 | Track a new file | `chezmoi add <path>` (public) or `dotfiles ov add <path>` (private) |
 | Stop tracking a file | `chezmoi forget <path>` (or `dotfiles ov forget`) |
-| Change a package list | edit `Brewfile` / `packages-apt.txt` / `~/.config/mise/config.toml`. Installs on next sync |
+| Change a package list | edit `packages/Brewfile` / `packages/apt.txt` / `~/.config/mise/config.toml`. Installs on next sync (apt: rerun `install.sh`, it needs your password) |
 
 New files under `~/.claude/{skills,agents,commands,rules}` go to the **private** overlay
-automatically. Nothing becomes public until you `promote` it.
+automatically. Nothing becomes public until you `promote` it. The sync only publishes config
+(`home/`, `packages/`, `claude/`, `macos/`, `drift-ignore`); changes to the repo's code you
+commit yourself.
+
+## Pull-only machines (work laptop, dev01)
+
+The base never pushes from these, and a base file you edit in place (`~/.zshrc`) is put back
+within 5 minutes. To change something there:
+
+- **Only for this machine group:** put it in the overlay (`~/.config/zsh/conf.d/work.zsh`,
+  `overlay.gitconfig`, …). On the work laptop the work repo pushes (`[modes] work = "push"`).
+- **For every machine, publicly:** `chezmoi edit --apply ~/.zshrc` (edits the repo copy, which the sync
+  keeps), then `dotfiles publish -m "feat(zsh): …"`. It shows the diff and asks before pushing.
+  It commits with the identity set *in the repo* and refuses without one, so the company git
+  identity is never used. One-time setup: [docs/windows.md](docs/windows.md#publishing-to-the-public-repo-from-the-work-laptop).
+  Agents can't run it; the guard hook blocks it.
 
 ## Where things go
 
@@ -64,7 +79,7 @@ automatically. Nothing becomes public until you `promote` it.
 | Skills | `~/.config/agents/skills/` (Claude + Codex) | same, in the overlay |
 | Claude plugins, marketplaces, permissions | base `settings.json` | added on top, never replacing |
 | MCP servers | (none) | `mcp-servers.json` |
-| Packages | `Brewfile`, `packages-apt.txt`, mise config | `Brewfile.overlay` |
+| Packages | `packages/Brewfile`, `packages/apt.txt`, mise config | `packages/Brewfile` |
 
 **Never tracked:** secrets, tokens, private keys, shell history, caches, Claude sessions
 (`~/.claude/projects`). `chezmoi add` refuses anything shaped like an API key.

@@ -164,6 +164,7 @@ def guard(script: str, payload: dict) -> subprocess.CompletedProcess:
         "git reset --hard HEAD~1",
         "git push --force origin main",
         "git clean -fd",
+        "dotfiles publish --yes",
     ],
 )
 def test_guard_blocks_destructive_commands(command, tmp_path):

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+from conftest import run
+
 
 def test_sync_commits_local_edits_in_one_conventional_commit(world):
     """1. Your edits reach GitHub in a single commit."""
@@ -131,6 +133,76 @@ def test_pull_only_machine_receives_changes_but_never_pushes(world):
     mac.sync()
     dev01.sync()
     assert "alias from_mac=1" in dev01.read(".zshrc")
+
+
+def test_pull_machine_keeps_an_unpublished_edit_when_others_push(world):
+    """3b. An edit waiting to be published on a pull-only machine survives incoming changes."""
+    # Given the work laptop (pull-only) has an edit in its repo copy, not yet published
+    mac = world.machine("macbook")
+    work = world.machine("work", mode="pull")
+    src = work.base_src / "home" / "dot_zshrc"
+    src.write_text(src.read_text() + "alias from_work=1\n")
+
+    # When the Mac pushes another change and the work laptop syncs
+    mac.write(".gitconfig", mac.read(".gitconfig") + "\tco = checkout\n")
+    mac.sync()
+    work.sync()
+
+    # Then the work laptop has both, and nothing was pushed from it
+    assert "co = checkout" in work.read(".gitconfig")
+    assert "alias from_work=1" in work.read(".zshrc")
+    assert "alias from_work=1" not in world.base.show("home/dot_zshrc")
+
+
+def test_publish_sends_an_edit_from_a_pull_machine_under_its_own_identity(world):
+    """3c. Publishing from the work laptop, as you, not as the company git user."""
+    # Given the work laptop's repo copy has your personal identity, and an edit
+    work = world.machine("work", mode="pull")
+    run(["git", "config", "--local", "user.email", "me@personal.example"], cwd=work.base_src)
+    src = work.base_src / "home" / "dot_zshrc"
+    src.write_text(src.read_text() + "alias from_work=1\n")
+
+    # When you publish it
+    result = work.dotfiles("publish", "--yes", "-m", "feat(zsh): add from_work alias")
+
+    # Then GitHub has it as one commit with that message and your personal email
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "alias from_work=1" in world.base.show("home/dot_zshrc")
+    assert world.base.commits()[0] == "feat(zsh): add from_work alias"
+    assert world.base.author_emails()[0] == "me@personal.example"
+
+
+def test_publish_refuses_without_a_personal_identity_in_the_repo(world):
+    """3d. Publishing never falls back to the machine's global (company) git identity."""
+    # Given the work laptop's repo copy has no identity of its own
+    work = world.machine("work", mode="pull")
+    before = world.base.commits()
+    src = work.base_src / "home" / "dot_zshrc"
+    src.write_text(src.read_text() + "alias from_work=1\n")
+
+    # When you try to publish
+    result = work.dotfiles("publish", "--yes", "-m", "feat(zsh): add alias")
+
+    # Then nothing is pushed, and you're told how to set your identity
+    assert result.returncode == 1
+    assert "git config --local user.email" in result.stdout
+    assert world.base.commits() == before
+
+
+def test_private_repo_can_push_while_public_base_stays_pull_only(world):
+    """3e. Work laptop: edits are saved to the work repo, never to the public base."""
+    # Given a machine where the base is pull-only and the private repo pushes
+    work = world.machine("work", mode="pull", modes={"personal": "push"})
+    base_before = world.base.commits()
+
+    # When you edit a private file and a public one, and the sync runs
+    work.write(".config/zsh/conf.d/personal.zsh", "export PERSONAL=2\n")
+    work.write(".zshrc", work.read(".zshrc") + "alias stray=1\n")
+    work.sync()
+
+    # Then the private edit is pushed, and the public base got nothing
+    assert "PERSONAL=2" in world.overlay.show("home/dot_config/zsh/conf.d/personal.zsh")
+    assert world.base.commits() == base_before
 
 
 def _make_clash(world):

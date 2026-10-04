@@ -92,6 +92,11 @@ def load_config() -> dict:
         return {"mode": "push", **tomllib.load(f)}
 
 
+def mode_of(cfg: dict, name: str) -> str:
+    """push or pull for one repo: [modes] <name> in config.toml, else the machine's mode."""
+    return cfg.get("modes", {}).get(name, cfg["mode"])
+
+
 def host(cfg: dict) -> str:
     return os.environ.get("DOTFILES_HOST") or cfg.get("host") or socket.gethostname().split(".")[0]
 
@@ -492,24 +497,27 @@ def ahead_behind(inst: Instance) -> tuple[int, int]:
     return (int(out[0]), int(out[1])) if len(out) == 2 else (0, 0)
 
 
+def apply_repo_edits(inst: Instance) -> bool:
+    """Copy edits made in the repo's home/ to $HOME, so a following re-add can't undo them."""
+    edited = inst.git("status", "--porcelain", "--untracked-files=all", "--", "home")
+    sources = [line[3:].split(" -> ")[-1] for line in edited.stdout.splitlines()]
+    targets = {str(HOME / target_name(s)) for s in sources}
+    existing = [t for t in targets if inst.chezmoi("source-path", t).returncode == 0]
+    if existing:
+        inst.chezmoi("apply", "--force", "--no-tty", *existing)
+    return bool(sources)
+
+
 def sync_repo(inst: Instance, cfg: dict, first: bool = False) -> dict | None:
     """Commit, pull and push one repo. Returns a conflict record, or None.
 
     On a machine's first sync nothing in $HOME is captured: the repo versions are installed
     over whatever config the machine had before.
     """
-    push = cfg["mode"] == "push"
+    push = mode_of(cfg, inst.name) == "push"
     if push and not first:
-        # Edits made in the repo itself go first, and are applied before re-add, so the older
-        # copy in $HOME can't overwrite them.
-        edited = inst.git("status", "--porcelain", "--untracked-files=all", "--", "home")
-        sources = [line[3:].split(" -> ")[-1] for line in edited.stdout.splitlines()]
-        if sources:
+        if apply_repo_edits(inst):
             commit_all(inst, host(cfg))
-            targets = {str(HOME / target_name(s)) for s in sources}
-            existing = [t for t in targets if inst.chezmoi("source-path", t).returncode == 0]
-            if existing:
-                inst.chezmoi("apply", "--force", "--no-tty", *existing)
         re_add = inst.chezmoi("re-add", "--no-tty", "--exclude", "externals")
         if re_add.returncode != 0:
             add_warning(f"{inst.name}: chezmoi re-add failed: {re_add.stderr.strip()[:300]}")
@@ -521,9 +529,13 @@ def sync_repo(inst: Instance, cfg: dict, first: bool = False) -> dict | None:
         return None
     ahead, behind = ahead_behind(inst)
     if not push:
-        if behind:
-            inst.git("reset", "-q", "--hard", "@{u}")
-        return None
+        # Pull-only: match GitHub exactly, unless this repo holds work you haven't published
+        # yet (`dotfiles publish`). That is kept and rebased like on a push machine.
+        dirty = inst.git("status", "--porcelain", "--untracked-files=no").stdout.strip()
+        if not ahead and not dirty:
+            if behind:
+                inst.git("reset", "-q", "--hard", "@{u}")
+            return None
     if behind and ahead:
         if inst.git("rebase", "-q", "--autostash", "@{u}").returncode != 0:
             files = inst.git("diff", "--name-only", "--diff-filter=U").stdout.split()
@@ -536,7 +548,7 @@ def sync_repo(inst: Instance, cfg: dict, first: bool = False) -> dict | None:
             }
     elif behind:
         inst.git("merge", "-q", "--ff-only", "--autostash", "@{u}")
-    if ahead_behind(inst)[0] and inst.git("push", "-q").returncode != 0:
+    if push and ahead_behind(inst)[0] and inst.git("push", "-q").returncode != 0:
         add_warning(f"{inst.name}: push failed; will retry")
     return None
 
@@ -609,7 +621,7 @@ def source_dir_name(rel: Path) -> str:
 def do_sync(cfg: dict) -> None:
     """One sync pass. Caller holds the lock."""
     first = not LAST.exists()
-    if cfg["mode"] == "push" and not first:
+    if mode_of(cfg, instances(cfg)[0].name) == "push" and not first:
         capture(cfg)
         capture_claude_settings(cfg)
         capture_mcp(cfg)
@@ -646,6 +658,66 @@ def cmd_sync(_args) -> int:
             print(banner_text(read_json(CONFLICT) or {}))
             return 0
         do_sync(cfg)
+    return 0
+
+
+def cmd_publish(args) -> int:
+    """Send this machine's base edits to GitHub once, after you review them.
+
+    For pull-only machines (the work laptop). The commit uses the identity set in the base
+    repo itself (`git config --local`), never the machine's global (company) one.
+    """
+    cfg = load_config()
+    base = instances(cfg)[-1]
+    email = base.git("config", "--local", "user.email").stdout.strip()
+    if not email:
+        print(
+            "dotfiles: set your personal git identity in the base repo first:\n"
+            f"  cd {base.repo}\n"
+            "  git config --local user.name '<name>'\n"
+            "  git config --local user.email '<personal email>'"
+        )
+        return 1
+    with Lock() as got:
+        if not got:
+            print("dotfiles: sync running; try again in a minute")
+            return 1
+        if CONFLICT.exists():
+            print(banner_text(read_json(CONFLICT) or {}))
+            return 1
+        apply_repo_edits(base)
+        re_add = base.chezmoi("re-add", "--no-tty", "--exclude", "externals")
+        if re_add.returncode != 0:
+            print(f"dotfiles: chezmoi re-add failed: {re_add.stderr.strip()[:300]}")
+            return 1
+        base.git("add", "--all", "--", *[p for p in SYNC_PATHS if (base.repo / p).exists()])
+        staged = base.git("diff", "--cached", "--stat").stdout.strip()
+        if staged:
+            print(staged)
+            print(base.git("diff", "--cached").stdout)
+            if not args.yes:
+                if not sys.stdin.isatty():
+                    print("dotfiles: confirm in a terminal, or pass --yes")
+                    base.git("reset", "-q")
+                    return 1
+                if input(f"Publish this to GitHub as {email}? [y/N] ").strip().lower() != "y":
+                    base.git("reset", "-q")
+                    print("dotfiles: nothing published; your edits are still here")
+                    return 1
+            commit_all(base, host(cfg), args.message)
+        if not ahead_behind(base)[0]:
+            print("dotfiles: nothing to publish")
+            return 0
+        conflict = sync_repo(base, {**cfg, "modes": {**cfg.get("modes", {}), "base": "push"}})
+        if conflict:
+            write_json(CONFLICT, conflict)
+            print(banner_text(conflict))
+            return 1
+        if ahead_behind(base)[0]:
+            print("dotfiles: push failed (offline, or no push access); run publish again later")
+            return 1
+        base.apply()
+    print(f"dotfiles: published as {email}")
     return 0
 
 
@@ -777,6 +849,12 @@ def cmd_status(args) -> int:
         print(f"Clash in {', '.join(conflict['targets'])} ({conflict['instance']} repo).")
         print("Run: dotfiles resolve")
     print(f"Last sync: {last.get('at', 'never')}")
+    for inst in instances(load_config()):
+        waiting = inst.git("status", "--porcelain", "--untracked-files=no", "--", *SYNC_PATHS)
+        if mode_of(load_config(), inst.name) == "pull" and (
+            ahead_behind(inst)[0] or waiting.stdout.strip()
+        ):
+            print(f"{inst.name}: local edits not on GitHub yet. To send them: dotfiles publish")
     for w in last.get("warnings", []):
         print(f"warning: {w}")
     return 1 if conflict else 0
@@ -866,6 +944,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("path")
     p = sub.add_parser("drift", help="list config under $HOME that nothing tracks or ignores")
     p.add_argument("--ignore", metavar="PATH", help="never list PATH again (saved and synced)")
+    p = sub.add_parser("publish", help="pull-only machines: review and send base edits once")
+    p.add_argument("-m", "--message", help="commit message (default: chore(sync): <host>: ...)")
+    p.add_argument("--yes", action="store_true", help="don't ask for confirmation")
     p = sub.add_parser("ov", help="run chezmoi against the overlay, e.g. dotfiles ov add <path>")
     p.add_argument("chezmoi_args", nargs=argparse.REMAINDER)
     sub.add_parser("render-claude-settings", help=argparse.SUPPRESS)
@@ -876,6 +957,7 @@ def main(argv: list[str]) -> int:
         "resolve": cmd_resolve,
         "promote": cmd_promote,
         "drift": cmd_drift,
+        "publish": cmd_publish,
         "ov": cmd_ov,
         "render-claude-settings": cmd_render_claude_settings,
     }[args.cmd](args)

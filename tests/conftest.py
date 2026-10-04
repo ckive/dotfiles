@@ -38,6 +38,10 @@ class Remote:
         """Commit subjects on main, newest first."""
         return self.git("log", "--format=%s", "main").splitlines()
 
+    def author_emails(self) -> list[str]:
+        """Commit author emails on main, newest first."""
+        return self.git("log", "--format=%ae", "main").splitlines()
+
     def files(self) -> list[str]:
         return self.git("ls-tree", "-r", "--name-only", "main").splitlines()
 
@@ -130,7 +134,12 @@ class World:
         return Remote(bare, self.env)
 
     def machine(
-        self, name: str, mode: str = "push", overlay: bool = True, first_sync: bool = True
+        self,
+        name: str,
+        mode: str = "push",
+        overlay: bool = True,
+        first_sync: bool = True,
+        modes: dict[str, str] | None = None,
     ) -> Machine:
         home = self.root / "machines" / name
         home.mkdir(parents=True)
@@ -160,6 +169,9 @@ class World:
         if overlay:
             (cfg / "personal.toml").write_text(f'sourceDir = "{overlay_src}"\n')
             lines.append('overlay = "personal"')
+        if modes:
+            lines.append("[modes]")
+            lines += [f'{repo} = "{m}"' for repo, m in modes.items()]
         (dcfg / "config.toml").write_text("\n".join(lines) + "\n")
         m = Machine(name, home, env, base_src, overlay_src, notify_log, mode)
         if first_sync:

@@ -50,6 +50,34 @@ whenever a shell starts.
 - **When** the sync runs
 - **Then** nothing is pushed from dev01, and dev01 still receives new changes from `main`
 
+### 3b. An edit waiting to be published survives incoming changes
+`test_pull_machine_keeps_an_unpublished_edit_when_others_push`
+- **Given** the work laptop (pull-only) has an edit in its repo copy (`chezmoi edit --apply ~/.zshrc`),
+  not yet published
+- **When** the Mac pushes another change and the work laptop syncs
+- **Then** the work laptop has both, and nothing was pushed from it
+
+### 3c. Publishing from the work laptop, as you
+`test_publish_sends_an_edit_from_a_pull_machine_under_its_own_identity`
+- **Given** the work laptop's repo copy has your personal git identity (`git config --local`)
+  and an edit
+- **When** you run `dotfiles publish -m "feat(zsh): add alias"` and confirm the diff
+- **Then** GitHub has one commit with that message, authored with your personal email
+
+### 3d. Publishing never uses the company identity
+`test_publish_refuses_without_a_personal_identity_in_the_repo`
+- **Given** the repo copy has no identity of its own (only the machine's global, company one)
+- **When** you run `dotfiles publish`
+- **Then** nothing is pushed, and it prints the `git config --local` commands to run.
+  Agents can't run `dotfiles publish` at all: the guard hook blocks it.
+
+### 3e. Work laptop: private repo pushes, public base doesn't
+`test_private_repo_can_push_while_public_base_stays_pull_only`
+- **Given** `config.toml` has `mode = "pull"` and `[modes] work = "push"`
+- **When** you edit a work-repo file and a base file, and the sync runs
+- **Then** the work edit is pushed to company git; the public base gets nothing, and the base
+  file goes back to the repo version
+
 ### 4. A clash never loses work: you choose, then it fixes itself
 `test_clash_keeps_local_file_and_waits_for_a_choice`
 `test_resolve_keep_mine_publishes_local_version`
