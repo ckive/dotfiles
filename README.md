@@ -60,7 +60,7 @@ commit yourself.
 The base never pushes from these, and a base file you edit in place (`~/.zshrc`) is put back
 within 5 minutes. To change something there:
 
-- **Only for this machine group:** put it in the overlay (`~/.config/zsh/conf.d/work.zsh`,
+- **Only for this machine group:** put it in the overlay (`~/.config/shell/conf.d/work.sh`,
   `overlay.gitconfig`, …). On the work laptop the work repo pushes (`[modes] work = "push"`).
 - **For every machine, publicly:** `chezmoi edit --apply ~/.zshrc` (edits the repo copy, which the sync
   keeps), then `dotfiles publish -m "feat(zsh): …"`. It shows the diff and asks before pushing.
@@ -72,7 +72,7 @@ within 5 minutes. To change something there:
 
 | Thing | Public base | Private overlay |
 |---|---|---|
-| Shell | `.zshrc`, `common.sh`, prompt | `~/.config/zsh/conf.d/*.zsh` |
+| Shell | `.zshrc`, `.bashrc` (Linux only), `common.sh`, prompt | `~/.config/shell/conf.d/*.sh` (bash and zsh), `~/.config/zsh/conf.d/*.zsh` |
 | Git | defaults, aliases, global ignore | identity, signing key |
 | SSH | defaults | `~/.ssh/config.d/*.conf` hosts |
 | Agent instructions | `~/.config/agents/standards.md` (Claude, Codex, Gemini all read it) | `~/.claude/rules/*.md`, overlay instructions |

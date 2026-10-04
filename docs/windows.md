@@ -9,7 +9,7 @@ is for Dan only.
 
 | Part | State |
 |---|---|
-| WSL side: zsh, git, mise tools, Claude/Codex config, background sync | **Done.** `install.sh`, tested in CI on a fresh Debian 13 |
+| WSL side: bash, git, mise tools, Claude/Codex config, background sync | **Done.** `install.sh`, tested in CI on a fresh Debian 13 |
 | Work overlay (private repo on company git) | You create it from `docs/overlay-template/` (step 2) |
 | Windows side: AutoHotkey, PowerShell, Windows Terminal, VS Code, winget | **You build it** (step 4) |
 
@@ -21,7 +21,7 @@ On Linux, WSL included, nothing macOS-only runs:
 | macOS defaults script, Rectangle | the script renders empty off macOS |
 | launchd job, `~/Library/**` | `~/Library` is ignored off macOS; a systemd user timer runs the sync instead |
 | VS Code extensions script | skips itself in WSL (VS Code runs on Windows; step 4 installs them) |
-| `kitty.conf`, `.p10k.zsh` | copied but harmless; p10k is the WSL prompt |
+| zsh config (`.zshrc`, oh-my-zsh, p10k), `kitty.conf` | copied but unused: WSL stays on bash, its default shell |
 
 ## Rules
 
@@ -65,7 +65,7 @@ sync puts back within 5 minutes. Move such settings into the overlay's `overlay.
    systemd=true
    ```
    If it doesn't, **ASK**, then add it with `sudo`, and have Dan run `wsl --shutdown` in
-   PowerShell and reopen the terminal. Without systemd the sync still runs at every zsh start
+   PowerShell and reopen the terminal. Without systemd the sync still runs each time a terminal opens
    (throttled to every 5 minutes), just not in the background.
 3. WSL can reach company git: `git ls-remote <work-repo-url>` works (set up an ssh key or
    credential helper first if needed; **ASK** which).
@@ -85,7 +85,7 @@ Fill it in from the step 0 list:
 
 | File | Put here |
 |---|---|
-| `home/dot_config/zsh/conf.d/work.zsh` | proxies, PATHs, env vars, company shell setup |
+| `home/dot_config/shell/conf.d/work.sh` | proxies, PATHs, env vars, company shell setup (POSIX sh; bash and zsh both load it) |
 | `home/dot_config/git/overlay.gitconfig` | work name/email, signing, `url.*.insteadOf`, credential helpers |
 | `home/private_dot_ssh/private_config.d/work.conf` | work ssh hosts |
 | `home/dot_config/agents/overlay.md` | work-only instructions for Claude, Codex and Gemini |
@@ -112,8 +112,8 @@ DOTFILES_MODE=pull DOTFILES_OVERLAY=work DOTFILES_OVERLAY_MODE=push sh install.s
 
 - `DOTFILES_MODE=pull`: the public base only ever receives here.
 - `DOTFILES_OVERLAY_MODE=push`: edits on this laptop are saved to the work repo.
-- It asks for the sudo password (apt packages from `packages/apt.txt`) and whether to make zsh
-  the login shell: answer **y**.
+- It asks for the sudo password (apt packages from `packages/apt.txt`). The login shell stays
+  bash.
 
 Check, and report each result:
 
@@ -121,19 +121,17 @@ Check, and report each result:
 cat ~/.config/dotfiles/config.toml        # mode = "pull", overlay = "work", [modes] work = "push"
 dotfiles status; echo $?                  # 0
 systemctl --user list-timers dotfiles-sync.timer   # listed (if systemd is on)
-getent passwd "$USER" | cut -d: -f7       # path to zsh
 ls ~/Library 2>&1                         # "No such file or directory"
 command -v brew || echo "no brew"         # "no brew"
-zsh -lc 'command -v rg gh just'           # all three from ~/.local/share/mise/shims
+bash -lc 'command -v rg gh just'          # all three from ~/.local/share/mise/shims
 ```
 
-Then open a **new** WSL tab: the p10k prompt appears (glyphs look broken until the font in
-step 4.3 is installed), and `gs`, `cz`, `lllm status` work. In `claude`, `/memory` lists the
-shared standards and the work `overlay.md`; `/skills` lists `rmsesh`; `claude mcp list` shows
-the work MCP servers.
+Then open a **new** WSL tab: `gs`, `cz` and `lllm status` work, and `echo $WORK_PROXY` (or
+whatever `work.sh` sets) prints the work value. In `claude`, `/memory` lists the shared standards
+and the work `overlay.md`; `/skills` lists `rmsesh`; `claude mcp list` shows the work MCP servers.
 
 Prove the work repo saves and the base doesn't: add a comment line to
-`~/.config/zsh/conf.d/work.zsh`, run `dotfiles sync`, and check that `git -C ~/dotfiles-work log -1`
+`~/.config/shell/conf.d/work.sh`, run `dotfiles sync`, and check that `git -C ~/dotfiles-work log -1`
 shows a `chore(sync)` commit that reached company git, while `git -C ~/dotfiles status -sb` shows
 no `ahead`.
 
@@ -174,7 +172,7 @@ path under the Windows home that it prints (e.g. `OneDrive - Company/Documents`)
 |---|---|
 | `AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/<name>.ahk` | AutoHotkey scripts, run at login. **ASK** Dan for the scripts and whether they're AutoHotkey v1 or v2 |
 | `<Documents>/PowerShell/Microsoft.PowerShell_profile.ps1` | PowerShell 7 profile. Windows PowerShell 5.1 uses `<Documents>/WindowsPowerShell/` instead; **ASK** which one Dan uses |
-| `AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json` | Windows Terminal. Set the WSL profile's `font.face` to `MesloLGS NF`. Terminal rewrites this file itself; the sync then commits its changes, which is expected |
+| `AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json` | Windows Terminal. Terminal rewrites this file itself; the sync then commits its changes, which is expected |
 | `AppData/Roaming/Code/User/settings.json.tmpl` | content: `{{ include (joinPath .baseSource "home/dot_config/editors/vscode/settings.json") }}` |
 | `run_onchange_after_10-winget.sh.tmpl` | `winget.exe import`, see below |
 | `run_onchange_after_20-vscode-extensions.sh.tmpl` | installs the base's `packages/vscode-extensions.txt` into Windows VS Code, see below |
@@ -190,9 +188,6 @@ VS Code extensions: the script embeds the sha256 of `{{ joinPath .baseSource "pa
 lists installed ones with `cmd.exe /c code --list-extensions`, and installs each missing one with
 `cmd.exe /c code --install-extension <id>`. Log failures and carry on, like the base script does.
 Some entries are macOS-only and will fail; that's fine. Dan turns VS Code Settings Sync **off**.
-
-Font for p10k: Dan installs the four MesloLGS NF `.ttf` files from the powerlevel10k README
-(double-click, Install). It isn't automated: per-user font install needs registry writes.
 
 Rules for files in `windows/`:
 - No `symlink_`, `private_` or `executable_` prefixes. drvfs ignores Unix modes, and Windows apps
@@ -264,13 +259,13 @@ If the company network blocks ssh on port 22, use GitHub's port-443 endpoint for
 Each time:
 
 ```bash
-chezmoi edit --apply ~/.zshrc                       # edits the repo copy; the sync keeps it
-dotfiles publish -m "feat(zsh): add foo alias"
+chezmoi edit --apply ~/.config/shell/common.sh     # edits the repo copy; the sync keeps it
+dotfiles publish -m "feat(shell): add foo alias"
 ```
 
 `publish` shows the full diff and asks before pushing. **Read the diff.** If anything
 work-specific is in it, answer `n` and move that part to the work overlay. If you edit
-`~/.zshrc` directly instead of using `chezmoi edit`, publish within 5 minutes, or the sync puts the
+the file in `~` directly instead of using `chezmoi edit`, publish within 5 minutes, or the sync puts the
 file back. Until you publish, `dotfiles status` reminds you that local edits aren't on GitHub.
 
 ## Acceptance checklist (report back)
@@ -279,11 +274,11 @@ file back. Until you publish, `dotfiles status` reminds you that local edits are
 - [ ] Backup tarball made; company lines moved into the work overlay (list them)
 - [ ] `config.toml`: `mode = "pull"`, `overlay = "work"`, `[modes] work = "push"`
 - [ ] `dotfiles status` exits 0; the sync timer is listed (or systemd is off and Dan knows)
-- [ ] zsh is the login shell; a new tab shows the p10k prompt; `gs`, `cz`, `lllm status` work
-- [ ] No `~/Library`, no `brew`; `zsh -lc 'command -v rg gh just'` finds all three
+- [ ] A new bash tab has `gs`, `cz`, `lllm status` and the `work.sh` settings
+- [ ] No `~/Library`, no `brew`; `bash -lc 'command -v rg gh just'` finds all three
 - [ ] Claude in WSL: `/memory` shows standards + work overlay; `/skills` lists `rmsesh`; `claude mcp list` shows work servers
-- [ ] An edit to `work.zsh` became a commit on company git; `~/dotfiles` shows no local commits
-- [ ] Windows: AutoHotkey scripts run after a reboot; PowerShell profile loads; Windows Terminal uses MesloLGS NF; VS Code settings and extensions applied
+- [ ] An edit to `work.sh` became a commit on company git; `~/dotfiles` shows no local commits
+- [ ] Windows: AutoHotkey scripts run after a reboot; PowerShell profile loads; Windows Terminal settings applied; VS Code settings and extensions applied
 - [ ] Editing an `.ahk` file on Windows shows up as a commit in the work repo after one sync
 - [ ] `feat/windows-instance` branch: new scenarios shown failing first, `just check` passes, handed to Dan
 - [ ] Nothing pushed to `ckive/*` by the agent
