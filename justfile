@@ -13,8 +13,8 @@ test *args:
     uv run pytest -n auto {{ args }}
 
 lint:
-    uv run ruff check .
-    uv run ruff format --check .
+    uv run ruff check . home/dot_local/bin/executable_cc-v-proxy
+    uv run ruff format --check . home/dot_local/bin/executable_cc-v-proxy
     uv run ty check bin/dotfiles tests
     uv run shellcheck {{ shell_scripts }}
     uv run shfmt -d -i 2 -ci {{ shell_scripts }}
