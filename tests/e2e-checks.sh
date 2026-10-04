@@ -19,7 +19,8 @@ check "mise installed" 'test -x "$HOME/.local/bin/mise"'
 check "ripgrep via mise" '"$HOME/.local/bin/mise" which rg'
 check "zsh installed by apt" 'command -v zsh'
 check "apt.txt installed (tmux)" 'command -v tmux'
-check "login shell finds mise tools" 'zsh -lc "command -v rg"'
+check "login zsh finds mise tools" 'zsh -lc "command -v rg"'
+check "login bash finds mise tools" 'bash -lc "command -v rg"'
 check "status healthy" '"$HOME/.local/bin/dotfiles" status'
 cat "$HOME/.local/state/dotfiles/last.json" 2>/dev/null
 exit $fail

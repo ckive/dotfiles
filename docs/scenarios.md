@@ -175,6 +175,40 @@ whenever a shell starts.
 - **When** chezmoi applies
 - **Then** `~/.claude/skills/rmsesh` and `~/.agents/skills/rmsesh` both point at it
 
+## Shells
+
+zsh on the Mac; bash on WSL and servers. Both get the same aliases, tools and sync.
+
+### 14b. Bash gets the shared aliases and the overlay's shell config
+`test_bash_loads_common_aliases_and_overlay_shell_config`
+- **Given** the work overlay sets a proxy in `~/.config/shell/conf.d/work.sh`
+- **When** a bash terminal opens
+- **Then** the proxy is set and `gs` works
+
+### 14c. Opening a terminal keeps config in sync
+`test_bash_starts_a_background_sync_at_most_every_five_minutes`
+- **Given** the last sync was over 5 minutes ago (e.g. WSL without systemd)
+- **When** a bash terminal opens
+- **Then** a sync starts in the background; within 5 minutes of a sync, it doesn't start another
+
+### 14d. Bash shows the clash banner
+`test_bash_warns_about_a_pending_clash`
+- **Given** a clash is waiting for a decision
+- **When** a bash terminal opens
+- **Then** it prints `dotfiles: clash pending, run: dotfiles resolve`
+
+### 14e. Scripts and agents find mise's tools
+`test_mise_tools_work_in_non_interactive_bash`, `test_mise_tools_work_in_non_interactive_login_shells`
+- **Given** `gh` comes only from mise
+- **When** a non-interactive bash (ssh command, login via `~/.profile`) or `zsh -l` runs `gh`
+- **Then** mise's `gh` runs
+
+### 14f. zsh loads the shared slot too
+`test_zsh_loads_overlay_shell_config_from_the_shared_slot`
+- **Given** an overlay file in `~/.config/shell/conf.d/`
+- **When** zsh starts
+- **Then** its settings are loaded
+
 ## Safety guards (Claude Code hooks)
 
 ### 15. Destructive commands are blocked

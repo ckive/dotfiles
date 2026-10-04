@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -142,6 +143,124 @@ def test_mise_tools_work_in_non_interactive_login_shells(fresh_home):
 
     # Then mise's gh runs
     assert out.stdout.strip() == "gh-from-mise", out.stderr
+
+
+def bash_home(tmp_path: Path) -> Path:
+    """A $HOME with this repo's .bashrc and common.sh, and a fake `dotfiles` that logs calls."""
+    home = tmp_path / "home"
+    (home / ".config" / "shell").mkdir(parents=True)
+    (home / ".bashrc").write_text((REPO / "home" / "dot_bashrc").read_text())
+    (home / ".config" / "shell" / "common.sh").write_text(
+        (REPO / "home" / "dot_config" / "shell" / "common.sh").read_text()
+    )
+    bin_dir = home / ".local" / "bin"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "dotfiles").write_text('#!/bin/sh\necho "$@" >> "$HOME/dotfiles-calls"\n')
+    (bin_dir / "dotfiles").chmod(0o755)
+    return home
+
+
+def bash(home: Path, script: str, interactive: bool = True) -> subprocess.CompletedProcess:
+    flags = ["-i", "-c"] if interactive else ["-c"]
+    return run(
+        ["bash", *flags, script],
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "TERM": "dumb"},
+        check=False,
+    )
+
+
+def test_bash_loads_common_aliases_and_overlay_shell_config(tmp_path):
+    """WSL uses bash: it gets the shared aliases and the overlay's ~/.config/shell/conf.d files."""
+    # Given the work overlay put a proxy setting in the shared shell slot
+    home = bash_home(tmp_path)
+    conf = home / ".config" / "shell" / "conf.d"
+    conf.mkdir()
+    (conf / "work.sh").write_text("export WORK_PROXY=http://proxy:8080\n")
+
+    # When an interactive bash starts
+    out = bash(home, 'echo "proxy=$WORK_PROXY"; alias gs')
+
+    # Then the work setting and the shared aliases are there
+    assert "proxy=http://proxy:8080" in out.stdout, out.stderr
+    assert "git status" in out.stdout
+
+
+def test_bash_starts_a_background_sync_at_most_every_five_minutes(tmp_path):
+    """Without systemd (common on WSL), opening a terminal is what keeps config in sync."""
+    # Given the last sync was long ago
+    home = bash_home(tmp_path)
+    calls = home / "dotfiles-calls"
+
+    # When a terminal opens
+    bash(home, "true")
+
+    # Then a sync starts in the background
+    for _ in range(50):
+        if calls.exists():
+            break
+        time.sleep(0.1)
+    assert calls.read_text().split() == ["sync"]
+
+    # And when a sync ran a moment ago, the next terminal doesn't start another
+    calls.unlink()
+    state = home / ".local" / "state" / "dotfiles"
+    state.mkdir(parents=True)
+    (state / "last.json").write_text("{}")
+    bash(home, "true")
+    time.sleep(1)
+    assert not calls.exists()
+
+
+def test_bash_warns_about_a_pending_clash(tmp_path):
+    """The clash banner shows in bash too."""
+    # Given a clash is waiting for a decision
+    home = bash_home(tmp_path)
+    state = home / ".local" / "state" / "dotfiles"
+    state.mkdir(parents=True)
+    (state / "conflict.json").write_text("{}")
+    (state / "last.json").write_text("{}")
+
+    # When a terminal opens
+    out = bash(home, "true")
+
+    # Then it says what to run
+    assert "dotfiles: clash pending, run: dotfiles resolve" in out.stdout + out.stderr
+
+
+def test_mise_tools_work_in_non_interactive_bash(tmp_path):
+    """Scripts and agents in bash can run tools only mise provides."""
+    # Given gh is installed only by mise, as a shim
+    home = bash_home(tmp_path)
+    shim = home / ".local" / "share" / "mise" / "shims" / "gh"
+    shim.parent.mkdir(parents=True)
+    shim.write_text("#!/bin/sh\necho gh-from-mise\n")
+    shim.chmod(0o755)
+
+    # When a non-interactive bash that reads .bashrc (ssh commands, ~/.profile) runs gh
+    out = bash(home, "source ~/.bashrc; gh", interactive=False)
+
+    # Then mise's gh runs
+    assert out.stdout.strip() == "gh-from-mise", out.stderr
+
+
+def test_zsh_loads_overlay_shell_config_from_the_shared_slot(fresh_home):
+    """The shared ~/.config/shell/conf.d slot works in zsh too (Mac, Linux servers)."""
+    # Given an overlay file in the shared slot
+    home, _, apply = fresh_home
+    apply()
+    conf = home / ".config" / "shell" / "conf.d"
+    conf.mkdir(parents=True)
+    (conf / "work.sh").write_text("export WORK_PROXY=http://proxy:8080\n")
+
+    # When zsh starts
+    out = run(
+        ["zsh", "-c", 'source ~/.zshrc; echo "proxy=$WORK_PROXY"'],
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+        check=False,
+    )
+
+    # Then the setting is loaded
+    assert "proxy=http://proxy:8080" in out.stdout, out.stderr
 
 
 def guard(script: str, payload: dict) -> subprocess.CompletedProcess:

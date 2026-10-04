@@ -6,7 +6,8 @@ then run the base `install.sh` and answer the overlay question with its URL.
 
 | File | Lands at / used for |
 |---|---|
-| `home/dot_config/zsh/conf.d/<name>.zsh` | sourced by `~/.zshrc` (PATHs, env, proxies) |
+| `home/dot_config/shell/conf.d/<name>.sh` | sourced by both bash and zsh (PATHs, env, proxies); keep it POSIX sh |
+| `home/dot_config/zsh/conf.d/<name>.zsh` | zsh only (zsh syntax, plugins) |
 | `home/dot_config/git/overlay.gitconfig` | identity, signing, URL rewrites |
 | `home/private_dot_ssh/private_config.d/<name>.conf` | ssh hosts |
 | `home/dot_config/agents/overlay.md` | extra agent instructions (Claude, Codex, Gemini) |
