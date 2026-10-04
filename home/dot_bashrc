@@ -1,8 +1,33 @@
-# Linux bash (servers, agent users). Interactive only.
+# Linux bash: WSL's default shell, servers, agent users.
+# shellcheck shell=bash disable=SC1090,SC1091 # sources files that only exist at runtime
+
+# Every bash that reads this file (ssh commands, login shells via ~/.profile) gets
+# ~/.local/bin and mise's tools, so scripts and agents can run them.
+case ":$PATH:" in *":$HOME/.local/share/mise/shims:"*) ;; *) PATH="$HOME/.local/share/mise/shims:$PATH" ;; esac
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac
+export PATH
+
+# The rest is for interactive shells only.
 [[ $- != *i* ]] && return
 [ -f /etc/bash.bashrc ] && . /etc/bash.bashrc
-export PATH="$HOME/.local/bin:$PATH"
+HISTSIZE=50000
+HISTFILESIZE=100000
+HISTCONTROL=ignoreboth
+shopt -s histappend checkwinsize
+[ -r /usr/share/bash-completion/bash_completion ] && . /usr/share/bash-completion/bash_completion
 command -v mise >/dev/null 2>&1 && eval "$(mise activate bash)"
 [ -r ~/.config/shell/common.sh ] && . ~/.config/shell/common.sh
-for f in ~/.config/bash/conf.d/*.sh; do [ -r "$f" ] && . "$f"; done
+
+# Machine- and overlay-specific additions (work proxies, PATHs, ...): shared with zsh.
+for f in ~/.config/shell/conf.d/*.sh ~/.config/bash/conf.d/*.sh; do [ -r "$f" ] && . "$f"; done
 unset f
+
+# dotfiles: say when a clash needs a decision, and sync in the background at most every 5 min.
+if command -v dotfiles >/dev/null 2>&1; then
+  _df_state="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles"
+  [ -f "$_df_state/conflict.json" ] && echo "dotfiles: clash pending, run: dotfiles resolve"
+  if [ -z "$(find "$_df_state/last.json" -mmin -5 2>/dev/null)" ]; then
+    (dotfiles sync >/dev/null 2>&1 &)
+  fi
+  unset _df_state
+fi

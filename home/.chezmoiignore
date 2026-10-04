@@ -12,6 +12,8 @@
 
 # Overlay drop-in slots (owned by the overlay)
 .config/zsh/conf.d
+.config/shell/conf.d
+.config/bash/conf.d
 .config/git/overlay.gitconfig
 .ssh/config.d
 .config/agents/overlay.md

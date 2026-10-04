@@ -39,7 +39,8 @@ add-zsh-hook precmd _uv_venv_auto
 [[ -r ~/.config/shell/common.sh ]] && source ~/.config/shell/common.sh
 
 # Machine- and overlay-specific additions (personal PATHs, work proxies, ...).
-for f in ~/.config/zsh/conf.d/*.zsh(N); do source "$f"; done
+# shell/conf.d/*.sh is shared with bash; zsh/conf.d/*.zsh is zsh-only.
+for f in ~/.config/shell/conf.d/*.sh(N) ~/.config/zsh/conf.d/*.zsh(N); do source "$f"; done
 unset f
 
 # dotfiles: say when a clash needs a decision, and sync in the background at most every 5 min.
