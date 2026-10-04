@@ -469,23 +469,30 @@ def apply_mcp(cfg: dict) -> None:
 SYNC_PATHS = ("home", "packages", "claude", "macos", "drift-ignore")
 
 
-def commit_all(inst: Instance, who: str, message: str | None = None) -> None:
+def sync_paths(inst: Instance) -> list[str]:
+    """The SYNC_PATHS this repo has, on disk or in git (a deleted folder still counts)."""
     tracked = set(inst.git("ls-files").stdout.splitlines())
-    paths = [
+    return [
         p
         for p in SYNC_PATHS
         if (inst.repo / p).exists() or any(t == p or t.startswith(p + "/") for t in tracked)
     ]
-    if paths:
-        inst.git("add", "--all", "--", *paths)
-    staged = inst.git("diff", "--cached", "--name-only").stdout.split()
+
+
+def commit_all(inst: Instance, who: str, message: str | None = None) -> None:
+    """Commit config changes only. Anything else you staged stays staged, uncommitted."""
+    paths = sync_paths(inst)
+    if not paths:
+        return
+    inst.git("add", "--all", "--", *paths)
+    staged = inst.git("diff", "--cached", "--name-only", "--", *paths).stdout.split()
     if not staged:
         return
     if not message:
         names = [target_name(p) for p in staged]
         summary = ", ".join(names[:3]) + (f" +{len(names) - 3} more" if len(names) > 3 else "")
         message = f"chore(sync): {who}: {summary}"
-    inst.git("commit", "-q", "-m", message, check=True)
+    inst.git("commit", "-q", "-m", message, "--", *paths, check=True)
 
 
 def has_upstream(inst: Instance) -> bool:
@@ -690,18 +697,19 @@ def cmd_publish(args) -> int:
         if re_add.returncode != 0:
             print(f"dotfiles: chezmoi re-add failed: {re_add.stderr.strip()[:300]}")
             return 1
-        base.git("add", "--all", "--", *[p for p in SYNC_PATHS if (base.repo / p).exists()])
-        staged = base.git("diff", "--cached", "--stat").stdout.strip()
+        paths = sync_paths(base)
+        base.git("add", "--all", "--", *paths)
+        staged = base.git("diff", "--cached", "--stat", "--", *paths).stdout.strip()
         if staged:
             print(staged)
-            print(base.git("diff", "--cached").stdout)
+            print(base.git("diff", "--cached", "--", *paths).stdout)
             if not args.yes:
                 if not sys.stdin.isatty():
                     print("dotfiles: confirm in a terminal, or pass --yes")
-                    base.git("reset", "-q")
+                    base.git("reset", "-q", "--", *paths)
                     return 1
                 if input(f"Publish this to GitHub as {email}? [y/N] ").strip().lower() != "y":
-                    base.git("reset", "-q")
+                    base.git("reset", "-q", "--", *paths)
                     print("dotfiles: nothing published; your edits are still here")
                     return 1
             commit_all(base, host(cfg), args.message)

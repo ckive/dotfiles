@@ -76,6 +76,26 @@ def test_stray_file_dropped_in_the_repo_is_not_published(world):
     assert "rmlint.json" not in world.base.files()
 
 
+def test_files_you_staged_outside_config_are_not_published(world):
+    """1f. Something you staged by hand in the repo (git add docs/...) waits for your own commit."""
+    # Given you staged a docs change in the repo, and also edited a config file
+    mac = world.machine("macbook")
+    doc = mac.base_src / "docs" / "notes.md"
+    doc.parent.mkdir()
+    doc.write_text("draft\n")
+    run(["git", "add", "docs/notes.md"], cwd=mac.base_src, env=mac.env)
+    mac.write(".zshrc", mac.read(".zshrc") + "alias staged_test=1\n")
+
+    # When the sync runs
+    mac.sync()
+
+    # Then the config edit is published, the staged docs change is not, and it's still staged
+    assert "alias staged_test=1" in world.base.show("home/dot_zshrc")
+    assert "docs/notes.md" not in world.base.files()
+    staged = run(["git", "diff", "--cached", "--name-only"], cwd=mac.base_src, env=mac.env)
+    assert staged.stdout.split() == ["docs/notes.md"]
+
+
 def test_unfinished_code_edit_in_the_repo_survives_incoming_changes(world):
     """1e. Half-edited repo code (bin/dotfiles) is neither published nor lost on pull."""
     # Given you are mid-edit on the sync script, and another machine pushed a change
