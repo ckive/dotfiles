@@ -7,6 +7,7 @@
 #   cc-v set-key <provider>            store a key (hidden prompt, chmod 600)
 #
 # A provider is ~/.config/cc-v/providers/<name>.env (KEY=VALUE lines, synced by dotfiles).
+# CC_V_PROXY=1 in it routes the session through cc-v-proxy, which fixes requests up.
 # Its key is ~/.config/cc-v/<name>.secret (never synced). Lines are exported, never eval'd.
 
 set -euo pipefail
@@ -88,4 +89,28 @@ unset ANTHROPIC_API_KEY
 ANTHROPIC_AUTH_TOKEN="$(head -n1 "$secret")"
 export ANTHROPIC_AUTH_TOKEN
 
-exec claude "$@"
+# CC_V_PROXY=1: the provider needs request fixups, so claude talks to cc-v-proxy instead.
+if [ "${CC_V_PROXY:-}" != 1 ]; then
+  exec claude "$@"
+fi
+unset CC_V_PROXY
+
+port_file="$(mktemp "${TMPDIR:-/tmp}/cc-v.XXXXXX")"
+rm -f "$port_file"
+mkdir -p "$HOME/.local/state/cc-v"
+cc-v-proxy "$ANTHROPIC_BASE_URL" "$port_file" "$$" 2>>"$HOME/.local/state/cc-v/proxy.log" &
+proxy=$!
+trap 'kill "$proxy" 2>/dev/null; rm -f "$port_file"' EXIT
+
+for _ in $(seq 50); do
+  [ -s "$port_file" ] && break
+  kill -0 "$proxy" 2>/dev/null || die "cc-v-proxy failed to start; see ~/.local/state/cc-v/proxy.log"
+  sleep 0.1
+done
+[ -s "$port_file" ] || die "cc-v-proxy did not start within 5s"
+
+ANTHROPIC_BASE_URL="http://127.0.0.1:$(cat "$port_file")"
+export ANTHROPIC_BASE_URL
+status=0
+claude "$@" || status=$?
+exit "$status"

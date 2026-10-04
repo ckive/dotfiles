@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""Local proxy cc-v puts between Claude Code and a provider that is almost Anthropic-compatible.
+
+  cc-v-proxy <upstream-base-url> <port-file> <parent-pid>
+
+Listens on a free 127.0.0.1 port, writes the port to <port-file>, and forwards every request
+to <upstream-base-url>. Bodies for /v1/messages* are rewritten so xAI accepts them:
+  - role=system messages are folded into the neighbouring user turn
+  - tool input schemas without `required` get `required: []`
+Replies (including SSE streams) pass through unchanged. Exits when <parent-pid> is gone.
+Upstream errors are appended to ~/.local/state/cc-v/proxy.log.
+"""
+
+import contextlib
+import http.client
+import json
+import os
+import signal
+import sys
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
+
+HOP_BY_HOP = {"connection", "keep-alive", "transfer-encoding", "content-length", "host"}
+LOG = os.path.expanduser("~/.local/state/cc-v/proxy.log")
+
+
+def blocks(content):
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}]
+    return list(content or [])
+
+
+def fix_messages(messages):
+    out = []
+    for m in messages:
+        if m.get("role") == "system":
+            m = dict(m, role="user", content=blocks(m.get("content")))
+        if out and out[-1]["role"] == m["role"] == "user":
+            out[-1] = dict(out[-1], content=blocks(out[-1]["content"]) + blocks(m["content"]))
+        else:
+            out.append(m)
+    return out
+
+
+def fix_body(body):
+    if isinstance(body.get("messages"), list):
+        body["messages"] = fix_messages(body["messages"])
+    for tool in body.get("tools") or []:
+        schema = tool.get("input_schema")
+        if isinstance(schema, dict) and schema.get("required") is None:
+            schema["required"] = []
+    return body
+
+
+def log(line):
+    try:
+        os.makedirs(os.path.dirname(LOG), exist_ok=True)
+        with open(LOG, "a") as f:
+            f.write(time.strftime("%Y-%m-%dT%H:%M:%S ") + line + "\n")
+    except OSError:
+        pass
+
+
+class Proxy(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.0"  # reply ends when we close: no re-chunking of streams
+    upstream = urlsplit("")
+
+    def forward(self):
+        body = self.rfile.read(int(self.headers.get("content-length") or 0))
+        rewritable = self.path.split("?")[0].startswith("/v1/messages")
+        if body and rewritable and not self.headers.get("content-encoding"):
+            with contextlib.suppress(ValueError):
+                body = json.dumps(fix_body(json.loads(body))).encode()
+        headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP_BY_HOP}
+        headers["content-length"] = str(len(body))
+        conn_cls = (
+            http.client.HTTPSConnection
+            if self.upstream.scheme == "https"
+            else http.client.HTTPConnection
+        )
+        conn = conn_cls(self.upstream.netloc, timeout=600)
+        try:
+            conn.request(self.command, self.upstream.path.rstrip("/") + self.path, body, headers)
+            resp = conn.getresponse()
+            self.send_response(resp.status, resp.reason)
+            for k, v in resp.getheaders():
+                if k.lower() not in HOP_BY_HOP:
+                    self.send_header(k, v)
+            self.send_header("connection", "close")
+            self.end_headers()
+            if resp.status >= 400:
+                err = resp.read()
+                log(f"{self.command} {self.path} -> {resp.status} {err[:500]!r}")
+                self.wfile.write(err)
+                return
+            while True:
+                chunk = resp.read1(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except (OSError, http.client.HTTPException) as e:
+            log(f"{self.command} {self.path} -> {e!r}")
+            with contextlib.suppress(OSError):
+                self.send_error(502, "cc-v-proxy: upstream unreachable")
+        finally:
+            conn.close()
+
+    do_GET = do_POST = do_HEAD = do_PUT = do_DELETE = forward
+
+    def log_message(self, format, *args):
+        pass
+
+
+def watch_parent(pid):
+    while True:
+        time.sleep(1)
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            os._exit(0)
+
+
+def main():
+    upstream, port_file, parent = sys.argv[1], sys.argv[2], int(sys.argv[3])
+    signal.signal(signal.SIGINT, signal.SIG_IGN)  # ctrl-C belongs to claude, not to us
+    Proxy.upstream = urlsplit(upstream)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Proxy)
+    server.daemon_threads = True
+    threading.Thread(target=watch_parent, args=(parent,), daemon=True).start()
+    tmp = port_file + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(str(server.server_port))
+    os.replace(tmp, port_file)
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
