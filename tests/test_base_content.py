@@ -123,6 +123,27 @@ def test_mise_tools_are_on_path_when_shell_plugins_load(fresh_home):
     assert "Cannot find fzf" not in out.stdout + out.stderr
 
 
+def test_mise_tools_work_in_non_interactive_login_shells(fresh_home):
+    """Scripts and agent shells (zsh -l, not interactive) can run tools that only mise provides."""
+    # Given gh is installed only by mise, as a shim
+    home, _, apply = fresh_home
+    apply()
+    shim = home / ".local" / "share" / "mise" / "shims" / "gh"
+    shim.parent.mkdir(parents=True)
+    shim.write_text("#!/bin/sh\necho gh-from-mise\n")
+    shim.chmod(0o755)
+
+    # When a non-interactive login shell runs gh
+    out = run(
+        ["zsh", "-lc", "gh"],
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+        check=False,
+    )
+
+    # Then mise's gh runs
+    assert out.stdout.strip() == "gh-from-mise", out.stderr
+
+
 def guard(script: str, payload: dict) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["bash", str(BIN / script)],

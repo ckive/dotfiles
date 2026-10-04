@@ -3,3 +3,7 @@ for brew in /opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbre
   [[ -x $brew ]] && { eval "$($brew shellenv)"; break; }
 done
 unset brew
+
+# mise tools for non-interactive shells (scripts, ssh commands, agents). Interactive shells
+# also run `mise activate` in .zshrc, which puts the real install dirs ahead of these shims.
+path=("$HOME/.local/share/mise/shims" $path)
