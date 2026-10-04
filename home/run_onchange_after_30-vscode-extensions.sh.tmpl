@@ -3,6 +3,8 @@
 # {{ include "../packages/vscode-extensions.txt" | sha256sum }}
 set -uo pipefail
 [ -n "${DOTFILES_SKIP_PACKAGES:-}" ] && exit 0
+# WSL: VS Code runs on Windows; the Windows side installs its extensions (docs/windows.md).
+grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null && exit 0
 code=$(command -v code || true)
 [ -z "$code" ] && [ -x "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" ] \
   && code="/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"

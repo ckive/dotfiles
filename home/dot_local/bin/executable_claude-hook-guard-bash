@@ -38,6 +38,10 @@ printf '%s' "$cmd" | grep -qE 'git\s+clean\s+(-[a-zA-Z]*\s*)*-[a-zA-Z]*[fd]' &&
 printf '%s' "$cmd" | grep -qE 'git\s+reset\s+--hard' &&
   block "git reset --hard (discards working tree)"
 
+# Publishing to the public dotfiles repo is Dan's call, made in his own terminal.
+printf '%s' "$cmd" | grep -qE '(^|[;&|/]|\s)dotfiles\s+publish' &&
+  block "dotfiles publish (pushes to the public repo; Dan runs it himself)"
+
 # Bulk staging sweeps in files nobody meant to commit (a tracked state.db once lost data).
 # Quoted strings are dropped first so commit messages can't trip these.
 unq="$(printf '%s' "$cmd" | sed -E "s/\"[^\"]*\"//g; s/'[^']*'//g")"
