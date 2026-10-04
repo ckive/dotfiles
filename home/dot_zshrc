@@ -51,3 +51,9 @@ if [[ -o interactive ]] && (( $+commands[dotfiles] )); then
   (( ${#_df_recent} )) || (dotfiles sync >/dev/null 2>&1 &)
   unset _df_state _df_recent
 fi
+
+# >>> grok installer >>>
+export PATH="$HOME/.grok/bin:$PATH"
+fpath=(~/.grok/completions/zsh $fpath)
+autoload -Uz compinit && compinit -C
+# <<< grok installer <<<
