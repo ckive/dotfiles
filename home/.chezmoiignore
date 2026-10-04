@@ -4,6 +4,7 @@
 **/.DS_Store
 
 # Per-machine state
+.config/cc-v/*.secret
 .config/dotfiles
 .local/state
 .cache
