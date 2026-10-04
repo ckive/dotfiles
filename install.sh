@@ -5,17 +5,20 @@
 #
 # Also the entrypoint GitHub Codespaces / devcontainers run from a checkout (pull-only, no overlay).
 # Optional env: DOTFILES_DIR, DOTFILES_MODE (push|pull), DOTFILES_OVERLAY (personal|work|none),
-# DOTFILES_OVERLAY_URL, DOTFILES_SKIP_PACKAGES=1, DOTFILES_SKIP_SCHEDULE=1.
+# DOTFILES_OVERLAY_URL, DOTFILES_OVERLAY_MODE (push|pull), DOTFILES_SKIP_PACKAGES=1,
+# DOTFILES_SKIP_SCHEDULE=1.
 set -eu
 
 BASE_URL="https://github.com/ckive/dotfiles.git"
 PERSONAL_URL="https://github.com/ckive/dotfiles-personal.git"
 
 say() { printf '\033[1mdotfiles:\033[0m %s\n' "$*"; }
+# interactive: someone is at a terminal (not CI, not a pipe without a tty)
+interactive() { [ -z "${CI:-}" ] && (: </dev/tty) 2>/dev/null; }
 # ask "question" default -> prints the answer (default when there is no terminal)
 ask() {
   reply=""
-  if [ -z "${CI:-}" ] && (: </dev/tty) 2>/dev/null; then
+  if interactive; then
     printf '%s [%s]: ' "$1" "$2" >/dev/tty
     read -r reply </dev/tty || reply=""
   fi
@@ -24,6 +27,8 @@ ask() {
 
 os="$(uname -s)"
 export PATH="$HOME/.local/bin:$PATH"
+sudo=""
+[ "$(id -u)" -eq 0 ] || sudo="sudo"
 
 # ---- 1. Tools the setup itself needs: git, curl, Homebrew (macOS), uv, chezmoi ----
 if [ "$os" = Darwin ]; then
@@ -39,8 +44,6 @@ elif command -v apt-get >/dev/null 2>&1; then
   done
   if [ -n "$need" ]; then
     say "installing$need"
-    sudo=""
-    [ "$(id -u)" -eq 0 ] || sudo="sudo"
     # shellcheck disable=SC2086 # $need is a word list
     $sudo apt-get update -q && $sudo apt-get install -yq $need
   fi
@@ -67,24 +70,56 @@ else
   }
 fi
 
+# ---- 2b. Linux (incl. WSL): the apt list, and zsh as login shell ----
+# Done here, not by the background sync: both can need your password.
+if [ "$os" = Linux ] && command -v apt-get >/dev/null 2>&1 && [ -z "${DOTFILES_SKIP_PACKAGES:-}" ]; then
+  need=""
+  while read -r p _; do
+    case "$p" in '' | '#'*) continue ;; esac
+    dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "ok installed" || need="$need $p"
+  done <"$base/packages/apt.txt"
+  if [ -n "$need" ]; then
+    say "installing$need"
+    # shellcheck disable=SC2086 # $need is a word list
+    { $sudo apt-get update -q && $sudo apt-get install -yq $need; } ||
+      say "some packages failed; run: sudo apt-get install$need"
+  fi
+fi
+if [ "$os" = Linux ] && interactive && [ -z "${CODESPACES:-}${REMOTE_CONTAINERS:-}" ]; then
+  zsh_path="$(command -v zsh || true)"
+  login_shell="$(getent passwd "$(id -un)" | cut -d: -f7)"
+  if [ -n "$zsh_path" ] && [ "$login_shell" != "$zsh_path" ]; then
+    if [ "$(ask "Make zsh your login shell (prompt, aliases, shell-start sync)? y/n" y)" = y ]; then
+      chsh -s "$zsh_path" </dev/tty || say "could not change shell; run: chsh -s $zsh_path"
+    fi
+  fi
+fi
+
 # ---- 3. Mode and overlay ----
 if [ -n "${CODESPACES:-}${REMOTE_CONTAINERS:-}" ]; then
   mode="${DOTFILES_MODE:-pull}"
   overlay="${DOTFILES_OVERLAY:-none}"
 else
-  mode="${DOTFILES_MODE:-$(ask "Sync mode: push (your machine) or pull (receive only)" push)}"
+  mode="${DOTFILES_MODE:-$(ask "Public base: push (your own machine) or pull (work laptop, servers)" push)}"
   overlay="${DOTFILES_OVERLAY:-$(ask "Private overlay: personal, work or none" none)}"
+fi
+overlay_mode="$mode"
+if [ "$overlay" != none ]; then
+  overlay_mode="${DOTFILES_OVERLAY_MODE:-$(ask "The $overlay repo: push or pull" "$mode")}"
 fi
 
 overlay_src=""
 if [ "$overlay" != none ]; then
-  case "$overlay" in
-    personal) url="${DOTFILES_OVERLAY_URL:-$PERSONAL_URL}" ;;
-    *) url="${DOTFILES_OVERLAY_URL:-$(ask "Git URL of the $overlay overlay" "")}" ;;
-  esac
   overlay_src="$(dirname "$base")/dotfiles-$overlay"
+  url=""
+  if [ ! -d "$overlay_src/.git" ]; then
+    case "$overlay" in
+      personal) url="${DOTFILES_OVERLAY_URL:-$PERSONAL_URL}" ;;
+      *) url="${DOTFILES_OVERLAY_URL:-$(ask "Git URL of the $overlay overlay" "")}" ;;
+    esac
+  fi
   if [ ! -d "$overlay_src/.git" ] && ! git clone -q "$url" "$overlay_src"; then
-    say "could not clone $url (private repo: run 'gh auth login && gh auth setup-git' first)."
+    say "could not clone $url. Set up access first (ssh key, or 'gh auth login && gh auth setup-git' for GitHub)."
     say "continuing without an overlay; rerun install.sh to add it."
     overlay=none
     overlay_src=""
@@ -94,7 +129,10 @@ fi
 mkdir -p "$HOME/.config/dotfiles" "$HOME/.config/chezmoi"
 {
   printf 'mode = "%s"\n' "$mode"
-  [ "$overlay" != none ] && printf 'overlay = "%s"\n' "$overlay"
+  if [ "$overlay" != none ]; then
+    printf 'overlay = "%s"\n' "$overlay"
+    if [ "$overlay_mode" != "$mode" ]; then printf '[modes]\n%s = "%s"\n' "$overlay" "$overlay_mode"; fi
+  fi
 } >"$HOME/.config/dotfiles/config.toml"
 if [ "$overlay" != none ]; then
   cat >"$HOME/.config/chezmoi/$overlay.toml" <<TOML
