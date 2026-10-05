@@ -57,3 +57,6 @@ export PATH="$HOME/.grok/bin:$PATH"
 fpath=(~/.grok/completions/zsh $fpath)
 autoload -Uz compinit && compinit -C
 # <<< grok installer <<<
+
+# Brew updates and cleanup
+alias brewclean='brew update && brew upgrade && brew cleanup && brew doctor'
