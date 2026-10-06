@@ -79,6 +79,9 @@ body is structured Given / When / Then.
 - "Delete" means delete — not rename to `.bak`.
 - A UI request that references existing behavior ("like g-d"): restate your reading in one
   sentence before changing layout.
+- Work in Q&A, one topic at a time. Run each decision by Dan before it goes into a plan —
+  no big all-at-once plans. Once a topic is decided, hand it to an implementation subagent
+  right away while the discussion moves on.
 
 ## Verification
 
@@ -86,6 +89,13 @@ body is structured Given / When / Then.
 - Don't report measured numbers (sizes, counts, timings) without the command that produced them.
 - Network-critical changes (DHCP, DNS, sshd, firewall): state the fallback and rollback
   command before applying.
+
+## Data safety
+
+- No backups (decided 2026-10-05). Git history is the safety net; revert, don't restore.
+- Data that a change could alter or lose permanently (media, databases, user files): work on
+  a copy, never the original.
+- Don't propose backup tooling (vzdump, PBS, offsite, dumps) or raise backups as a risk.
 
 ## Every repo gets
 
