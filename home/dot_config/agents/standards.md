@@ -36,8 +36,25 @@ Applies to every project unless a project's own CLAUDE.md overrides it.
 
 ## TypeScript
 
-**Undecided as of 2026-08-25.** Dan wants to research the options first — do not assume a
-package manager, linter, or test framework. Ask.
+Principle: the most modern tool that has become the standard — one tool per slot, fast
+native binaries over plugin stacks (the uv/ruff philosophy). **Decided** by Dan: Biome.
+The other rows are Claude's 2026-10-05 proposal (first used in wins-viewer `web/`); Dan is
+curating them, so follow them but flag any row that fights a project.
+
+| Slot | Tool |
+|---|---|
+| Node version | `mise` (`mise.toml` per repo) — never nvm or Volta (unmaintained) |
+| Package manager | `pnpm` — commit `pnpm-lock.yaml`; never npm/yarn |
+| Build / dev server | Vite |
+| Type check | `tsc --noEmit` (TypeScript 7 native), `strict` on |
+| Lint + format | **Biome** — never ESLint, Prettier |
+| Unit tests | Vitest |
+| Browser / e2e | Playwright across Chromium, Firefox, WebKit |
+| UI | SolidJS when a page needs components; plain DOM for a single page |
+| Runtime validation | Valibot at trust boundaries (network, storage) |
+
+- `pnpm add` / `pnpm add -D` / `pnpm install --frozen-lockfile` in CI.
+- `just lint` → `biome ci`; `just fmt` → `biome check --write`.
 
 ## Testing style — BDD, no Gherkin
 
