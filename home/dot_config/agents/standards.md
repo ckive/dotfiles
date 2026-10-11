@@ -97,6 +97,18 @@ body is structured Given / When / Then.
   a copy, never the original.
 - Don't propose backup tooling (vzdump, PBS, offsite, dumps) or raise backups as a risk.
 
+## Branch & worktree naming
+
+`<id>-<w1>-<w2>`: e.g. `hl-12-recre-stack`. Decided 2026-10-11.
+
+- `<id>` is the Plane item ID, lowercased (`HL-12` → `hl-12`). pfi matches IDs case-insensitively.
+- Words come from the item name. Drop a leading `type(scope):`, filler words (the, in, to, not,
+  let…), numbers and the project prefix. Keep the first 2 and cut each to 5 chars. No words
+  means just `<id>`.
+- The worktree dir is the same name, `wt/hl-12-recre-stack`. A review checkout adds `-review`.
+  tmux sessions keep the uppercase ID (`HL-12`).
+- Never a `type/` prefix. Never drop the ID.
+
 ## Every repo gets
 
 - **`justfile`** — same verbs everywhere: `just setup`, `just test`, `just lint`, `just fmt`,
