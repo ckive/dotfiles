@@ -1,0 +1,29 @@
+#!/bin/bash
+# Schedule the autoshop retro (daily). Reruns when the schedule files change:
+{{- if eq .chezmoi.os "darwin" }}
+# {{ include "Library/LaunchAgents/com.ckive.autoshop-retro.plist.tmpl" | sha256sum }}
+{{- else }}
+# {{ include "dot_config/systemd/user/autoshop-retro.service.tmpl" | sha256sum }} {{ include "dot_config/systemd/user/autoshop-retro.timer" | sha256sum }}
+{{- end }}
+{{- $autoshop := get . "autoshopDir" | default (joinPath .chezmoi.homeDir "Desktop/projects/autoshop") }}
+set -uo pipefail
+[ -n "${DOTFILES_SKIP_SCHEDULE:-}" ] && exit 0
+# The job runs the retro plugin from an autoshop checkout; machines without one skip it.
+if [ ! -d {{ joinPath $autoshop "plugins/retro" | quote }} ]; then
+  echo "retro: no autoshop checkout at {{ $autoshop }}; not scheduled" >&2
+  exit 0
+fi
+mkdir -p "$HOME/.local/state/autoshop-retro"
+{{ if eq .chezmoi.os "darwin" -}}
+plist="$HOME/Library/LaunchAgents/com.ckive.autoshop-retro.plist"
+launchctl bootout "gui/$(id -u)/com.ckive.autoshop-retro" >/dev/null 2>&1 || true
+launchctl bootstrap "gui/$(id -u)" "$plist" || echo "retro: could not load $plist" >&2
+{{- else -}}
+if systemctl --user show-environment >/dev/null 2>&1; then
+  systemctl --user daemon-reload
+  systemctl --user enable --now autoshop-retro.timer
+else
+  echo "retro: no systemd user session; not scheduled" >&2
+fi
+{{- end }}
+exit 0

@@ -1,0 +1,31 @@
+{{- $autoshop := get . "autoshopDir" | default (joinPath .chezmoi.homeDir "Desktop/projects/autoshop") -}}
+[Unit]
+Description=autoshop retro (mine this machine's agent sessions for friction, file needs)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/state/autoshop-retro
+Environment=PATH=%h/.local/bin:%h/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin
+Environment=AUTOSHOP_DIR={{ $autoshop }}
+{{- with get . "retroPlaneProject" }}
+Environment=AUTOSHOP_RETRO_PLANE_PROJECT={{ . }}
+{{- end }}
+# Budget from the 2026-10-06 dry run on the Mac ($1.10, 13 turns). The plane MCP server gets
+# reads plus creating labels and work items: rules allow a whole MCP tool, so its other write
+# actions are denied by parameter.
+ExecStart=%h/.local/bin/claude -p /retro:retro --plugin-dir {{ $autoshop }}/plugins/retro \
+  --max-budget-usd 3 --max-turns 40 \
+  --allowedTools Read Glob Grep "Bash(uv run --script *)" "Edit(~/.local/state/autoshop-retro/**)" \
+    mcp__plane__project mcp__plane__state mcp__plane__label mcp__plane__workitem \
+  --disallowedTools \
+    mcp__plane__project(action:create) mcp__plane__project(action:update) \
+    mcp__plane__project(action:delete) mcp__plane__project(action:archive) \
+    mcp__plane__project(action:unarchive) mcp__plane__project(action:update_features) \
+    mcp__plane__state(action:create) mcp__plane__state(action:update) mcp__plane__state(action:delete) \
+    mcp__plane__label(action:update) mcp__plane__label(action:delete) \
+    mcp__plane__workitem(action:update) mcp__plane__workitem(action:delete) \
+    mcp__plane__workitem(action:archive) mcp__plane__workitem(action:manage_assignee) \
+    mcp__plane__workitem(action:manage_label)
+TimeoutStartSec=30min
+Nice=10

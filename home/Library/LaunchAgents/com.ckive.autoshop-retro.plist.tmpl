@@ -1,0 +1,80 @@
+{{- $autoshop := get . "autoshopDir" | default (joinPath .chezmoi.homeDir "Desktop/projects/autoshop") -}}
+{{- $state := joinPath .chezmoi.homeDir ".local/state/autoshop-retro" -}}
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The autoshop retro: once a day, mine this Mac's agent sessions for friction and file needs.
+     A run missed while the Mac slept starts on wake. Budget from the 2026-10-06 dry run ($1.10). -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ckive.autoshop-retro</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{ .chezmoi.homeDir }}/.local/bin/claude</string>
+    <string>-p</string>
+    <string>/retro:retro</string>
+    <string>--plugin-dir</string>
+    <string>{{ $autoshop }}/plugins/retro</string>
+    <string>--max-budget-usd</string>
+    <string>3</string>
+    <string>--max-turns</string>
+    <string>40</string>
+    <string>--allowedTools</string>
+    <string>Read</string>
+    <string>Glob</string>
+    <string>Grep</string>
+    <string>Bash(uv run --script *)</string>
+    <string>Edit(~/.local/state/autoshop-retro/**)</string>
+    <!-- The plane MCP server: reads, plus creating labels and work items. Rules allow a whole MCP
+         tool, so its other write actions are denied by parameter below. This Mac has no plane
+         server yet, so its runs stay dry runs until one is registered. -->
+    <string>mcp__plane__project</string>
+    <string>mcp__plane__state</string>
+    <string>mcp__plane__label</string>
+    <string>mcp__plane__workitem</string>
+    <string>--disallowedTools</string>
+    <string>mcp__plane__project(action:create)</string>
+    <string>mcp__plane__project(action:update)</string>
+    <string>mcp__plane__project(action:delete)</string>
+    <string>mcp__plane__project(action:archive)</string>
+    <string>mcp__plane__project(action:unarchive)</string>
+    <string>mcp__plane__project(action:update_features)</string>
+    <string>mcp__plane__state(action:create)</string>
+    <string>mcp__plane__state(action:update)</string>
+    <string>mcp__plane__state(action:delete)</string>
+    <string>mcp__plane__label(action:update)</string>
+    <string>mcp__plane__label(action:delete)</string>
+    <string>mcp__plane__workitem(action:update)</string>
+    <string>mcp__plane__workitem(action:delete)</string>
+    <string>mcp__plane__workitem(action:archive)</string>
+    <string>mcp__plane__workitem(action:manage_assignee)</string>
+    <string>mcp__plane__workitem(action:manage_label)</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>{{ $state }}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>{{ .chezmoi.homeDir }}/.local/bin:{{ .chezmoi.homeDir }}/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>AUTOSHOP_DIR</key>
+    <string>{{ $autoshop }}</string>
+{{- with get . "retroPlaneProject" }}
+    <key>AUTOSHOP_RETRO_PLANE_PROJECT</key>
+    <string>{{ . }}</string>
+{{- end }}
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>LowPriorityIO</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>{{ $state }}/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{ $state }}/launchd.log</string>
+</dict>
+</plist>

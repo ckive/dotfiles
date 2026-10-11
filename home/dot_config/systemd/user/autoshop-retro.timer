@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the autoshop retro once a day
+
+[Timer]
+OnCalendar=*-*-* 06:30
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
