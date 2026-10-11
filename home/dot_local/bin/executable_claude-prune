@@ -187,7 +187,7 @@ def running_claudes(cfg: Path, now: float) -> list[Proc]:
         )
     try:
         out = subprocess.run(
-            ["ps", "-ax", "-o", "pid=,etime=,args="],
+            ["ps", "-A", "-o", "pid=,etime=,args="],
             capture_output=True,
             text=True,
             timeout=10,
@@ -239,10 +239,15 @@ def make_plan(cfg: Path, now: float) -> Plan:
     procs = running_claudes(cfg, now)
     loop = agent_loop_sessions()
     notes: list[str] = []
+    unknown = [str(p.pid) for p in procs if p.session_id is None]
+    if unknown:
+        notes.append(
+            f"running claude without a session record (pid {', '.join(unknown)}): "
+            "its session is skipped only if written in the last 30 minutes"
+        )
 
-    history = cfg / "history.jsonl"
     try:
-        raw = history.read_bytes()
+        raw = (cfg / "history.jsonl").read_bytes()
     except OSError:
         raw = b""
     lines = raw.splitlines(keepends=True)
@@ -297,14 +302,12 @@ def make_plan(cfg: Path, now: float) -> Plan:
             and m.group(1) not in pastes_in_use
         ):
             candidates.append((m.group(1), f))
-    if candidates and keep:
-        kept_text = b""
-        for sid in keep:
-            for category, p in sessions.get(sid, Session(sid)).paths:
-                if category == "transcripts" and p.is_file():
-                    with contextlib.suppress(OSError):
-                        kept_text += p.read_bytes()
-        candidates = [(h, f) for h, f in candidates if h.encode() not in kept_text]
+    for sid in keep:
+        for category, p in sessions.get(sid, Session(sid)).paths:
+            if candidates and category == "transcripts" and p.is_file():
+                with contextlib.suppress(OSError):
+                    text = p.read_bytes()
+                    candidates = [(h, f) for h, f in candidates if h.encode() not in text]
     pastes = [f for _, f in candidates]
 
     # shell-snapshots: keyed by creation time, not session. A running claude keeps using the one
