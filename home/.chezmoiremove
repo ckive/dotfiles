@@ -1,0 +1,4 @@
+# Removed from the source; delete the deployed copies on every machine too.
+.claude/skills/rmsesh
+.agents/skills/rmsesh
+.config/agents/skills/rmsesh

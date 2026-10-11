@@ -1,0 +1,453 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.12"
+# ///
+"""claude-prune: delete every local Claude Code session that isn't live.
+
+  claude-prune          dry run: list what would be deleted, with sizes; delete nothing
+  claude-prune --yes    delete it
+
+Deletes, under $CLAUDE_CONFIG_DIR (default ~/.claude), only these session artifacts:
+  projects/<project>/<id>.jsonl and <id>/   transcript, subagents, tool results
+  file-history/<id>/  todos/<id>-agent-*.json  session-env/<id>/  debug/<id>.txt
+  history.jsonl       prompts of deleted sessions (the file is rewritten, or removed if empty)
+  paste-cache/<hash>.txt          pastes no kept prompt refers to
+  shell-snapshots/snapshot-*.sh   snapshots older than the oldest running claude
+Anything else (settings, CLAUDE.md, skills, plugins, memory, plans, ~/.claude.json, files it
+doesn't recognise) is never touched.
+
+A session is live, and skipped, when a running `claude` has it (sessions/<pid>.json, or
+--resume/--session-id <id> on its command line), agent-loop tracks it for a later resume
+(dev01: <state_dir>/state.json), or any of its files changed in the last 30 minutes.
+"""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+RECENT = 30 * 60  # seconds: anything written this recently counts as live
+SNAPSHOT_SLACK = 10 * 60  # a session's shell snapshot is taken shortly after it starts
+AGENT_LOOP_CONFIG = Path("/etc/agent-loop/config.json")
+
+# Session-keyed locations: (category, folder under the config dir, entry name -> group 1 = id).
+# "projects/*" means every project folder. This is the whole delete list for sessions.
+LOCATIONS = (
+    ("transcripts", "projects/*", re.compile(rf"({UUID})(?:\.jsonl)?")),
+    ("file-history", "file-history", re.compile(rf"({UUID})")),
+    ("todos", "todos", re.compile(rf"({UUID})(?:-agent-{UUID})?\.json")),
+    ("session-env", "session-env", re.compile(rf"({UUID})")),
+    ("debug", "debug", re.compile(rf"({UUID})\.txt")),
+)
+SNAPSHOT = re.compile(r"snapshot-[a-z]+-(\d{13})-[a-z0-9]+\.sh")
+PASTE = re.compile(r"([0-9a-f]{8,64})\.txt")
+CLAUDE_ARG_ID = re.compile(rf"(?:--resume|-r|--session-id)[ =]({UUID})")
+CATEGORIES = (*(c for c, _, _ in LOCATIONS), "shell-snapshots", "paste-cache", "history.jsonl")
+
+
+@dataclass
+class Session:
+    id: str
+    paths: list[tuple[str, Path]] = field(default_factory=list)  # (category, path)
+
+
+@dataclass
+class Proc:
+    pid: int
+    session_id: str | None
+    started: float | None  # epoch seconds
+
+
+@dataclass
+class Plan:
+    delete: list[Session]
+    keep: dict[str, str]  # session id -> why it's live
+    snapshots: list[Path]
+    pastes: list[Path]
+    history: list[tuple[bytes, str | None]]  # history.jsonl lines, with the session to drop for
+    history_read: int  # bytes of history.jsonl when planned
+    notes: list[str]
+
+
+def config_dir() -> Path:
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude").expanduser()
+
+
+def entries(folder: Path) -> list[Path]:
+    try:
+        return sorted(folder.iterdir())
+    except OSError:
+        return []
+
+
+def newest_mtime(path: Path) -> float:
+    """Latest mtime of a file, or of anything inside a folder (symlinks not followed)."""
+    try:
+        newest = path.lstat().st_mtime
+    except OSError:
+        return 0.0
+    if path.is_dir() and not path.is_symlink():
+        for root, dirs, files in os.walk(path):
+            for name in dirs + files:
+                with contextlib.suppress(OSError):
+                    newest = max(newest, os.lstat(os.path.join(root, name)).st_mtime)
+    return newest
+
+
+def size(path: Path) -> int:
+    try:
+        total = path.lstat().st_size
+    except OSError:
+        return 0
+    if path.is_dir() and not path.is_symlink():
+        for root, _, files in os.walk(path):
+            for name in files:
+                with contextlib.suppress(OSError):
+                    total += os.lstat(os.path.join(root, name)).st_size
+    return total
+
+
+def remove(path: Path) -> None:
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink(missing_ok=True)
+
+
+def find_sessions(cfg: Path) -> dict[str, Session]:
+    sessions: dict[str, Session] = {}
+    for category, rel, pattern in LOCATIONS:
+        if rel == "projects/*":
+            folders = [p for p in entries(cfg / "projects") if p.is_dir() and not p.is_symlink()]
+        else:
+            folders = [cfg / rel]
+        for folder in folders:
+            for entry in entries(folder):
+                m = pattern.fullmatch(entry.name)
+                if m:
+                    sid = m.group(1)
+                    sessions.setdefault(sid, Session(sid)).paths.append((category, entry))
+    return sessions
+
+
+def alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def elapsed_seconds(etime: str) -> int | None:
+    """ps etime, [[dd-]hh:]mm:ss, as seconds (same format on BSD and GNU ps)."""
+    days, _, clock = etime.rpartition("-")
+    try:
+        parts = [int(x) for x in clock.split(":")]
+        secs = 0
+        for part in parts:
+            secs = secs * 60 + part
+        return secs + int(days or 0) * 86400
+    except ValueError:
+        return None
+
+
+def running_claudes(cfg: Path, now: float) -> list[Proc]:
+    """Running claude processes: from Claude's own sessions/<pid>.json, then from ps."""
+    procs: dict[int, Proc] = {}
+    for f in entries(cfg / "sessions"):
+        if f.suffix != ".json":
+            continue
+        try:
+            d = json.loads(f.read_text())
+            pid = int(d["pid"])
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if not alive(pid):
+            continue
+        started = d.get("startedAt")
+        sid = d.get("sessionId")
+        procs[pid] = Proc(
+            pid,
+            sid if isinstance(sid, str) else None,
+            started / 1000 if isinstance(started, int | float) else None,
+        )
+    try:
+        out = subprocess.run(
+            ["ps", "-ax", "-o", "pid=,etime=,args="],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        out = ""
+    for line in out.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) < 3 or os.path.basename(parts[2].split()[0]) != "claude":
+            continue
+        try:
+            pid = int(parts[0])
+        except ValueError:
+            continue
+        secs = elapsed_seconds(parts[1])
+        m = CLAUDE_ARG_ID.search(parts[2])
+        p = procs.setdefault(pid, Proc(pid, None, None))
+        if p.session_id is None and m:
+            p.session_id = m.group(1)
+        if p.started is None and secs is not None:
+            p.started = now - secs
+    return list(procs.values())
+
+
+def agent_loop_sessions() -> dict[str, str]:
+    """Session id -> item, for every session agent-loop (dev01) may resume by id."""
+    dirs = [Path.home() / ".local/state/agent-loop"]
+    try:
+        configured = json.loads(AGENT_LOOP_CONFIG.read_text()).get("state_dir")
+        if configured:
+            dirs.append(Path(configured))
+    except (OSError, ValueError, AttributeError):
+        pass
+    found: dict[str, str] = {}
+    for d in dirs:
+        try:
+            items = json.loads((d / "state.json").read_text()).get("items", {})
+        except (OSError, ValueError, AttributeError):
+            continue
+        for item, rec in items.items() if isinstance(items, dict) else ():
+            sid = rec.get("session_id") if isinstance(rec, dict) else None
+            if isinstance(sid, str):
+                found[sid] = item
+    return found
+
+
+def make_plan(cfg: Path, now: float) -> Plan:
+    sessions = find_sessions(cfg)
+    procs = running_claudes(cfg, now)
+    loop = agent_loop_sessions()
+    notes: list[str] = []
+
+    history = cfg / "history.jsonl"
+    try:
+        raw = history.read_bytes()
+    except OSError:
+        raw = b""
+    lines = raw.splitlines(keepends=True)
+    parsed = []
+    for line in lines:
+        try:
+            d = json.loads(line)
+        except ValueError:
+            d = None
+        parsed.append(d if isinstance(d, dict) else None)
+
+    ids = set(sessions)
+    ids.update(d["sessionId"] for d in parsed if d and isinstance(d.get("sessionId"), str))
+
+    running = {p.session_id: p.pid for p in procs if p.session_id}
+    keep: dict[str, str] = {}
+    for sid in sorted(ids):
+        if sid in running:
+            keep[sid] = f"running claude (pid {running[sid]})"
+        elif sid in loop:
+            keep[sid] = f"agent-loop will resume it ({loop[sid]})"
+        elif sid in sessions:
+            age = now - max(newest_mtime(p) for _, p in sessions[sid].paths)
+            if age < RECENT:
+                keep[sid] = f"written {int(age // 60)} min ago"
+    delete = [s for sid, s in sorted(sessions.items()) if sid not in keep]
+
+    # history.jsonl: keep the live sessions' prompts, recent ones, and lines it can't read.
+    history: list[tuple[bytes, str | None]] = []
+    pastes_in_use: set[str] = set()
+    for line, d in zip(lines, parsed, strict=True):
+        sid = d.get("sessionId") if d else None
+        ts = d.get("timestamp") if d else None
+        recent = isinstance(ts, int | float) and now * 1000 - ts < RECENT * 1000
+        if d is None or not isinstance(sid, str) or sid in keep or recent:
+            history.append((line, None))
+            pasted = d.get("pastedContents") if d else None
+            for v in pasted.values() if isinstance(pasted, dict) else ():
+                if isinstance(v, dict) and isinstance(v.get("contentHash"), str):
+                    pastes_in_use.add(v["contentHash"])
+        else:
+            history.append((line, sid))
+
+    # paste-cache: keyed by content hash. Kept if a kept prompt or kept transcript refers to it.
+    candidates = []
+    for f in entries(cfg / "paste-cache"):
+        m = PASTE.fullmatch(f.name)
+        if (
+            m
+            and f.is_file()
+            and now - newest_mtime(f) >= RECENT
+            and m.group(1) not in pastes_in_use
+        ):
+            candidates.append((m.group(1), f))
+    if candidates and keep:
+        kept_text = b""
+        for sid in keep:
+            for category, p in sessions.get(sid, Session(sid)).paths:
+                if category == "transcripts" and p.is_file():
+                    with contextlib.suppress(OSError):
+                        kept_text += p.read_bytes()
+        candidates = [(h, f) for h, f in candidates if h.encode() not in kept_text]
+    pastes = [f for _, f in candidates]
+
+    # shell-snapshots: keyed by creation time, not session. A running claude keeps using the one
+    # it took at startup, so keep every snapshot from the oldest running claude's start onwards.
+    snapshots: list[Path] = []
+    if any(p.started is None for p in procs):
+        notes.append("shell-snapshots kept: a running claude's start time is unknown")
+    else:
+        starts = [p.started for p in procs if p.started is not None]
+        cutoff = min(starts, default=now + RECENT) - SNAPSHOT_SLACK
+        for f in entries(cfg / "shell-snapshots"):
+            m = SNAPSHOT.fullmatch(f.name)
+            if (
+                m
+                and int(m.group(1)) / 1000 < cutoff
+                and now - newest_mtime(f) >= RECENT
+                and (f.is_file() or f.is_symlink())
+            ):
+                snapshots.append(f)
+
+    return Plan(delete, keep, snapshots, pastes, history, len(raw), notes)
+
+
+def human(n: float) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} GB"
+
+
+def report(cfg: Path, plan: Plan, dry: bool) -> None:
+    counts = dict.fromkeys(CATEGORIES, 0)
+    sizes = dict.fromkeys(CATEGORIES, 0)
+    for s in plan.delete:
+        for category, p in s.paths:
+            counts[category] += 1
+            sizes[category] += size(p)
+    for category, files in (("shell-snapshots", plan.snapshots), ("paste-cache", plan.pastes)):
+        counts[category] = len(files)
+        sizes[category] = sum(size(f) for f in files)
+    dropped = [line for line, sid in plan.history if sid]
+    counts["history.jsonl"] = len(dropped)
+    sizes["history.jsonl"] = sum(len(line) for line in dropped)
+
+    verb = "Would delete" if dry else "Deleting"
+    head = f"claude-prune: {'dry run, nothing deleted' if dry else 'deleting'} ({cfg})"
+    print(head, end="\n\n")
+    if not any(counts.values()):
+        print("Nothing to delete.")
+    else:
+        print(f"{verb} {len(plan.delete)} sessions:")
+        for category in CATEGORIES:
+            if counts[category]:
+                unit = "prompts" if category == "history.jsonl" else "items"
+                print(
+                    f"  {category:<16} {counts[category]:>6} {unit:<8} {human(sizes[category]):>10}"
+                )
+        print(f"  {'total':<16} {'':>15} {human(sum(sizes.values())):>10}")
+    if plan.keep:
+        print(f"\nSkipped {len(plan.keep)} live sessions:")
+        for sid, why in plan.keep.items():
+            print(f"  {sid}  {why}")
+    for note in plan.notes:
+        print(f"\nNote: {note}")
+    if dry and any(counts.values()):
+        print("\nRun `claude-prune --yes` to delete.")
+
+
+def rewrite_history(cfg: Path, plan: Plan, spared: set[str]) -> None:
+    """Drop the deleted sessions' prompts. Lines appended since planning (live sessions) stay."""
+    history = cfg / "history.jsonl"
+    with history.open("rb") as f:
+        f.seek(plan.history_read)
+        appended = f.read()
+    kept = b"".join(line for line, sid in plan.history if sid is None or sid in spared) + appended
+    if not kept:
+        history.unlink()
+        return
+    tmp = history.with_name(f".{history.name}.claude-prune.{os.getpid()}")
+    tmp.write_bytes(kept)
+    shutil.copymode(history, tmp)
+    with history.open("rb") as f:  # one more look: an append in the last moment
+        f.seek(plan.history_read + len(appended))
+        late = f.read()
+    if late:
+        with tmp.open("ab") as f:
+            f.write(late)
+    os.replace(tmp, history)
+
+
+def execute(cfg: Path, plan: Plan) -> int:
+    errors = 0
+    # Re-check right before deleting: a session may have been resumed since planning.
+    now = time.time()
+    live_now = {p.session_id for p in running_claudes(cfg, now) if p.session_id}
+    spared = set(live_now)
+    for s in plan.delete:
+        if s.id in live_now or now - max(newest_mtime(p) for _, p in s.paths) < RECENT:
+            print(f"  {s.id}  became live; skipped")
+            spared.add(s.id)
+            continue
+        for _, p in s.paths:
+            try:
+                remove(p)
+            except OSError as e:
+                errors += 1
+                print(f"  could not delete {p}: {e}", file=sys.stderr)
+    for f in [*plan.snapshots, *plan.pastes]:
+        try:
+            remove(f)
+        except OSError as e:
+            errors += 1
+            print(f"  could not delete {f}: {e}", file=sys.stderr)
+    if any(sid for _, sid in plan.history):
+        try:
+            rewrite_history(cfg, plan, spared)
+        except OSError as e:
+            errors += 1
+            print(f"  could not rewrite history.jsonl: {e}", file=sys.stderr)
+    print("\nDone." if not errors else f"\nDone, with {errors} errors.")
+    return 1 if errors else 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        prog="claude-prune",
+        description="Delete every local Claude Code session that isn't live. "
+        "Without --yes it only shows what would be deleted.",
+    )
+    ap.add_argument("--yes", action="store_true", help="actually delete")
+    args = ap.parse_args()
+
+    cfg = config_dir()
+    if not cfg.is_dir():
+        print(f"claude-prune: no Claude config at {cfg}; nothing to do")
+        return 0
+    plan = make_plan(cfg, time.time())
+    report(cfg, plan, dry=not args.yes)
+    if not args.yes:
+        return 0
+    return execute(cfg, plan)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
