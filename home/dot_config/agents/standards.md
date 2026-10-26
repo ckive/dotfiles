@@ -64,8 +64,7 @@ body is structured Given / When / Then.
 - **No Gherkin, no Cucumber, no `.feature` files, no step definitions.**
 - Name tests after behavior: `test_resolves_exe_link_when_captcha_absent`, not `test_resolve`.
 - Test at workflow boundaries over internal functions.
-- When Dan describes a feature as a scenario, write the behavior test **first** and
-  confirm the scenario list before implementing.
+- When Dan describes a feature as a scenario, write the behavior test **first**.
 - C++: scenario-shaped GoogleTest names, e.g. `TEST(ResolveExeLink, WhenNoCaptcha_RecordsDestination)`.
 - Bug fixes start red: write a test that reproduces the bug, show it failing, then fix.
 - UI changes: end with a short manual test script (keys to press, expected result) and
